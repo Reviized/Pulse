@@ -573,6 +573,17 @@
   <p class="field-error" id="trainerror" role="alert"></p>
 </section>
 
+<!-- TRAIN · INTRO -->
+<section class="screen" id="trainintro" aria-label="Training introduction">
+  <div style="position: relative; width: 140px; height: 140px; margin: 0 auto 28px;">
+    <div class="mary-fig"><div class="halo" id="introhalo">M</div></div>
+  </div>
+  <span class="tag-chip"><span class="dot"></span>Train mode</span>
+  <h1 class="hero-title" id="introheadline">Before we start,</h1>
+  <p class="sub" id="introbody">I read your company's site a few minutes ago, so I already know a bit about you. I'll ask a handful of quick questions, then build the rest of your training around what you tell me.</p>
+  <button class="pill-btn pulsing" id="beginintstart" type="button">Begin the interview</button>
+</section>
+
 <!-- TRAIN · INTERVIEW -->
 <section class="screen" id="interview" aria-label="Pre-training interview">
   <div class="call-shell">
@@ -888,7 +899,7 @@
 
   /* ============ state machine ============ */
   var screens = {};
-  ["modes", "urlentry", "pipeline", "gate", "trainentry", "interview", "profilebuild", "profile", "viewer", "manager"].forEach(function (n) { screens[n] = gid(n); });
+  ["modes", "urlentry", "pipeline", "gate", "trainentry", "trainintro", "interview", "profilebuild", "profile", "viewer", "manager"].forEach(function (n) { screens[n] = gid(n); });
   var current = "modes";
   var managerReturn = "modes";
 
@@ -1046,6 +1057,7 @@
   ];
   var pipelineAbort = false;
   var pendingExp = null;
+  var pendingTrainInterview = null;
 
   function buildPipeUI(mode) {
     var el = gid("pipesteps");
@@ -1259,7 +1271,15 @@
         var qs = await buildQuestions(exp, slides);
         stepState("questions", "done");
         wire("ok", qs.length + " interview questions staged");
-        setTimeout(function () { startLiveInterview(exp, slides, qs); }, 700);
+        pendingTrainInterview = { exp: exp, slides: slides, qs: qs };
+        var introCo = (exp && (exp.company_name || exp.name)) || new URL(url).hostname;
+        var introAccent = brandAccentHex(exp);
+        if (introAccent) {
+          gid("introhalo").style.background =
+            "radial-gradient(circle at 32% 30%, color-mix(in srgb, " + introAccent + " 65%, white), " + introAccent + " 62%, color-mix(in srgb, " + introAccent + " 45%, black))";
+        }
+        gid("introheadline").textContent = "Before we start, " + introCo;
+        setTimeout(function () { show("trainintro"); }, 700);
         return;
       }
       gid("gatecompany").textContent = (exp && (exp.company_name || exp.name)) || new URL(url).hostname;
@@ -1666,6 +1686,13 @@
     try { if (recog) { recog.stop(); recog = null; } } catch (e) {}
   }
 
+  gid("beginintstart").addEventListener("click", function () {
+    if (!pendingTrainInterview) return;
+    var p = pendingTrainInterview;
+    pendingTrainInterview = null;
+    startLiveInterview(p.exp, p.slides, p.qs);
+  });
+
   function startLiveInterview(exp, slides, questions) {
     var co = (exp && (exp.company_name || exp.name)) || "the company";
     trainCtx = {
@@ -1677,7 +1704,7 @@
     /* brand the room with the scraped identity */
     var accentHex = brandAccentHex(exp);
     if (accentHex) {
-      document.querySelector(".mary-fig .halo").style.background =
+      document.querySelector("#interview .mary-fig .halo").style.background =
         "radial-gradient(circle at 32% 30%, color-mix(in srgb, " + accentHex + " 65%, white), " + accentHex + " 62%, color-mix(in srgb, " + accentHex + " 45%, black))";
     }
     applyBrandFont(exp);
