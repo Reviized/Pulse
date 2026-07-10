@@ -1730,6 +1730,7 @@
     var worryLc = (trainCtx.worry || "").toLowerCase();
     var strengthLc = (trainCtx.strength || "").toLowerCase();
     var full = 0, skim = 0, skip = 0;
+    var areaBadges = [];
     var rows = areas.map(function (a, i) {
       var alc = a.toLowerCase();
       var badge, cls, rowCls = "";
@@ -1738,8 +1739,10 @@
       else if (c >= 4) { badge = "Skim"; cls = "b-skim"; skim++; }
       else if (c === 3) { if (i < 2) { badge = "Full"; cls = "b-full"; full++; } else { badge = "Skim"; cls = "b-skim"; skim++; } }
       else { badge = "Full"; cls = "b-full"; full++; }
+      areaBadges.push({ area: a, cls: cls });
       return "<div class='mod-row " + rowCls + "'><span><span class='mname'>" + (i + 1) + " · " + escapeHtml(a) + "</span></span><span class='badge " + cls + "'>" + badge + "</span></div>";
     });
+    trainCtx.areaBadges = areaBadges;
     if (trainCtx.worry && full === 0) {
       rows.push("<div class='mod-row'><span><span class='mname'>" + (areas.length + 1) + " · Flagged: " + escapeHtml(trainCtx.worry.slice(0, 44)) + "</span></span><span class='badge b-full'>Full + checkpoint</span></div>");
       full++;
@@ -1763,9 +1766,31 @@
     gid("trainnote").textContent = "Routing computed locally from your real answers. In the live build the full transcript is scored by conversation analysis before routing.";
   }
 
+  var SKIP_W = { "b-full": -1, "b-skim": 0, "b-skip": 1 };
+  function orderSlidesForTraining(slides, areaBadges) {
+    if (!areaBadges || !areaBadges.length || slides.length < 2) return slides;
+    function sigWords(s) { return String(s).toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 3; }); }
+    var areaTokens = areaBadges.map(function (a) { return { cls: a.cls, words: sigWords(a.area) }; });
+    var head = slides.slice(0, 1); /* keep the opening/welcome slide first */
+    var rest = slides.slice(1).map(function (s, i) {
+      var label = field(s, ["eyebrow", "headline", "title"]);
+      var words = sigWords(label);
+      var best = null, bestShared = 0;
+      areaTokens.forEach(function (a) {
+        var shared = words.filter(function (w) { return a.words.indexOf(w) >= 0; }).length;
+        if (shared > bestShared) { bestShared = shared; best = a; }
+      });
+      var weight = (bestShared > 0 && best) ? SKIP_W[best.cls] : 0;
+      return { s: s, i: i, weight: weight };
+    });
+    rest.sort(function (a, b) { return a.weight - b.weight || a.i - b.i; });
+    return head.concat(rest.map(function (r) { return r.s; }));
+  }
+
   gid("begintraining").addEventListener("click", function () {
     if (trainCtx && trainCtx.slides && trainCtx.slides.length) {
-      buildViewer(trainCtx.exp, trainCtx.slides);
+      var ordered = orderSlidesForTraining(trainCtx.slides, trainCtx.areaBadges);
+      buildViewer(trainCtx.exp, ordered);
     } else {
       gid("trainnote").textContent = "No slides landed for this experience yet — check the wire log from the build.";
     }
