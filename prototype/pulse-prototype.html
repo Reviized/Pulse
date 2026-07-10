@@ -849,19 +849,39 @@
     wireEl.appendChild(d);
     wireEl.scrollTop = wireEl.scrollHeight;
   }
+  var sawNetfail = false;
   async function sb(method, path, body, label) {
     var url = BACKEND + path;
     wire("req", "→ " + method + " " + (label || path));
-    var res = await fetch(url, {
-      method: method,
-      headers: HDRS,
-      body: body ? JSON.stringify(body) : undefined
-    });
-    var text = await res.text();
-    var data = null;
-    try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
-    wire(res.ok ? "ok" : "err", "← " + res.status + " " + (typeof data === "string" ? data : JSON.stringify(data)));
-    return { ok: res.ok, status: res.status, data: data, headers: res.headers };
+    try {
+      var res = await fetch(url, {
+        method: method,
+        headers: HDRS,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      var text = await res.text();
+      var data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+      wire(res.ok ? "ok" : "err", "← " + res.status + " " + (typeof data === "string" ? data : JSON.stringify(data)));
+      return { ok: res.ok, status: res.status, data: data, headers: res.headers };
+    } catch (err) {
+      sawNetfail = true;
+      wire("err", "✗ blocked before a response: " + err.message + " (CORS preflight or host network policy)");
+      return { ok: false, status: 0, data: null, netfail: true };
+    }
+  }
+  /* Edge-function trigger that survives missing CORS headers on the function:
+     if the readable call is blocked, resend as a no-preflight request —
+     the function still EXECUTES server side; we watch the tables for results. */
+  async function fnNudge(path, body) {
+    var r = await sb("POST", path, body);
+    if (r.netfail) {
+      try {
+        await fetch(BACKEND + path, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(body) });
+        wire("req", "↷ resent blind (no-cors) " + path + " — response unreadable, watching the tables instead");
+      } catch (e2) { wire("err", "✗ blind send failed too: " + e2.message); }
+    }
+    return r;
   }
 
   /* ============ state machine ============ */
@@ -1090,6 +1110,7 @@
       if (u.hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)) { err.textContent = "Public websites only."; return; }
     } catch (ex) { err.textContent = "That does not look like a URL."; return; }
     err.textContent = "";
+    if (connected === false) { gid("cspoverlay").classList.add("show"); return; }
     runLivePipeline(raw, "inform");
   });
   gid("piperetry") && gid("piperetry").addEventListener("click", function () { enterUrlEntry(); });
@@ -1108,21 +1129,26 @@
       stepState("create", "running");
       var r = await sb("POST", "/functions/v1/pulse-experiences", { url: url, mode: mode });
       if (r.ok && r.data) expId = r.data.experience_id || r.data.id || (r.data.data && r.data.data.id) || null;
-      if (!expId) {
+      if (!expId && !r.netfail) {
         var r2 = await sb("POST", "/functions/v1/pulse-experiences", { action: "create", url: url, mode: mode });
         if (r2.ok && r2.data) expId = r2.data.experience_id || r2.data.id || (r2.data.data && r2.data.data.id) || null;
       }
       if (!expId) {
-        wire("req", "edge function did not return an id — inserting row directly via REST");
+        wire("req", "falling back: inserting the experience row directly via REST (platform CORS, always readable)");
         var host = new URL(url).hostname.replace(/^www\./, "");
-        var r3 = await fetch(BACKEND + "/rest/v1/experiences", {
-          method: "POST",
-          headers: Object.assign({}, HDRS, { "Prefer": "return=representation" }),
-          body: JSON.stringify({ source_url: url, mode: mode, status: "draft", name: host })
-        });
-        var t3 = await r3.text();
-        wire(r3.ok ? "ok" : "err", "← " + r3.status + " " + t3.slice(0, 300));
-        if (r3.ok) { var rows3 = JSON.parse(t3); expId = rows3[0] && rows3[0].id; }
+        try {
+          var r3 = await fetch(BACKEND + "/rest/v1/experiences", {
+            method: "POST",
+            headers: Object.assign({}, HDRS, { "Prefer": "return=representation" }),
+            body: JSON.stringify({ source_url: url, mode: mode, status: "draft", name: host })
+          });
+          var t3 = await r3.text();
+          wire(r3.ok ? "ok" : "err", "← " + r3.status + " " + t3.slice(0, 300));
+          if (r3.ok) { var rows3 = JSON.parse(t3); expId = rows3[0] && rows3[0].id; }
+        } catch (e3) {
+          sawNetfail = true;
+          wire("err", "✗ REST insert blocked too: " + e3.message);
+        }
       }
       if (!expId) throw new Error("Could not create an experience record. See the wire log for the exact backend responses.");
       stepState("create", "done");
@@ -1153,13 +1179,13 @@
         if (flags.slides && slides.length > 0) break;
 
         var elapsed = Date.now() - started;
-        if (!flags.scrape && !nudged.scrape && elapsed > 8000) { nudged.scrape = true; await sb("POST", "/functions/v1/pulse-scrape", { experience_id: expId, url: url }); }
-        if (flags.scrape && !flags.dna && !nudged.dna) { nudged.dna = true; await sb("POST", "/functions/v1/pulse-design-dna", { experience_id: expId }); }
-        if (flags.scrape && !flags.brief && !nudged.brief && (flags.dna || elapsed > 60000)) { nudged.brief = true; await sb("POST", "/functions/v1/pulse-brief", { experience_id: expId }); }
+        if (!flags.scrape && !nudged.scrape && elapsed > (r.netfail ? 0 : 8000)) { nudged.scrape = true; await fnNudge("/functions/v1/pulse-scrape", { experience_id: expId, url: url }); }
+        if (flags.scrape && !flags.dna && !nudged.dna) { nudged.dna = true; await fnNudge("/functions/v1/pulse-design-dna", { experience_id: expId }); }
+        if (flags.scrape && !flags.brief && !nudged.brief && (flags.dna || elapsed > 60000)) { nudged.brief = true; await fnNudge("/functions/v1/pulse-brief", { experience_id: expId }); }
         if (flags.brief && !flags.slides && !nudged.slides) {
           nudged.slides = true;
-          await sb("POST", "/functions/v1/" + (mode === "train" ? "pulse-train-generate" : "pulse-slides-generate"), { experience_id: expId });
-          if (mode === "train") await sb("POST", "/functions/v1/pulse-slides-generate", { experience_id: expId });
+          await fnNudge("/functions/v1/" + (mode === "train" ? "pulse-train-generate" : "pulse-slides-generate"), { experience_id: expId });
+          if (mode === "train") await fnNudge("/functions/v1/pulse-slides-generate", { experience_id: expId });
         }
 
         await new Promise(function (res) { setTimeout(res, 2500); });
@@ -1183,7 +1209,20 @@
       }, 700);
     } catch (err) {
       wire("err", "PIPELINE HALTED: " + err.message);
-      ["create", "scrape", "dna", "brief", "slides"].forEach(function (k) {
+      /* pinpoint which of the two failure modes this is */
+      try {
+        var probe = await fetch(BACKEND + "/rest/v1/experiences?select=id&limit=1", { headers: HDRS });
+        if (probe.ok && sawNetfail) {
+          wire("err", "DIAGNOSIS: the database is reachable but the edge functions are not readable from this page. The deployed pulse-* functions are missing CORS handling — each needs an OPTIONS handler and an Access-Control-Allow-Origin header on every response. Until then this page drives what it can through REST and blind triggers.");
+        } else if (probe.ok) {
+          wire("err", "DIAGNOSIS: network is fine — the backend responded but not with what the pipeline needs. Read the responses above; the contract of the deployed function likely differs.");
+        } else {
+          wire("err", "DIAGNOSIS: backend answered HTTP " + probe.status + " on a plain read — check the anon key and RLS policies.");
+        }
+      } catch (e4) {
+        wire("err", "DIAGNOSIS: ALL outbound calls are blocked from this context. You are likely viewing this inside a hosted or desktop preview. Download the file and double-click it so Chrome opens it directly — the pipeline runs for real there.");
+      }
+      ["create", "scrape", "dna", "brief", "slides", "questions"].forEach(function (k) {
         var row = gid("ps-" + k);
         if (row && row.classList.contains("running")) stepState(k, "fail");
       });
@@ -1469,6 +1508,7 @@
       if (u.hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)) { err.textContent = "Public websites only."; return; }
     } catch (ex) { err.textContent = "That does not look like a URL."; return; }
     err.textContent = "";
+    if (connected === false) { gid("cspoverlay").classList.add("show"); return; }
     runLivePipeline(raw, "train");
   });
 

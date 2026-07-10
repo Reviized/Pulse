@@ -86,13 +86,17 @@ function silentWav() {
 
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://127.0.0.1:9971");
-  const cors = {
+  const fnBlocked = process.env.BLOCK_FN === "1" && u.pathname.startsWith("/functions/");
+  const cors = fnBlocked ? {} : {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "apikey, authorization, content-type, prefer",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
     "Access-Control-Expose-Headers": "Content-Range"
   };
-  if (req.method === "OPTIONS") { res.writeHead(204, cors); res.end(); return; }
+  if (req.method === "OPTIONS") {
+    if (fnBlocked) { res.writeHead(404); res.end(); return; } /* function without OPTIONS handler */
+    res.writeHead(204, cors); res.end(); return;
+  }
 
   let body = "";
   req.on("data", (c) => (body += c));
