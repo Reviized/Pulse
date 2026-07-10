@@ -1180,8 +1180,8 @@
 
         var elapsed = Date.now() - started;
         if (!flags.scrape && !nudged.scrape && elapsed > (r.netfail ? 0 : 8000)) { nudged.scrape = true; await fnNudge("/functions/v1/pulse-scrape", { experience_id: expId, url: url }); }
-        if (flags.scrape && !flags.dna && !nudged.dna) { nudged.dna = true; await fnNudge("/functions/v1/pulse-design-dna", { experience_id: expId }); }
-        if (flags.scrape && !flags.brief && !nudged.brief && (flags.dna || elapsed > 60000)) { nudged.brief = true; await fnNudge("/functions/v1/pulse-brief", { experience_id: expId }); }
+        if (flags.scrape && !flags.dna && !nudged.dna) { nudged.dna = true; await fnNudge("/functions/v1/pulse-design-dna", { experience_id: expId, url: url }); }
+        if (flags.scrape && !flags.brief && !nudged.brief && (flags.dna || elapsed > 60000)) { nudged.brief = true; await fnNudge("/functions/v1/pulse-brief", { experience_id: expId, mode: mode }); }
         if (flags.brief && !flags.slides && !nudged.slides) {
           nudged.slides = true;
           await fnNudge("/functions/v1/" + (mode === "train" ? "pulse-train-generate" : "pulse-slides-generate"), { experience_id: expId });
