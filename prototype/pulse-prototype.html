@@ -1051,7 +1051,7 @@
     var el = gid("pipesteps");
     el.innerHTML = "";
     var steps = PIPE_STEPS.slice();
-    if (mode === "train") steps.push({ key: "questions", label: "Write the interview questions from the scrape", provider: "chat-proxy · claude" });
+    if (mode === "train") steps.push({ key: "questions", label: "Write the interview questions from the scrape", provider: "derived from scrape" });
     steps.forEach(function (s, i) {
       var row = document.createElement("div");
       row.className = "pipe-step";
@@ -1585,25 +1585,11 @@
   async function buildQuestions(exp, slides) {
     var co = (exp && (exp.company_name || exp.name)) || "the company";
     var cats = categoriesFrom(exp, slides);
+    /* the deployed chat-proxy is hardcoded to a fixed "Justin McClure" persona (confirmed from its
+       real source) — it can never return interview questions grounded in an arbitrary scraped
+       company, so there is no working real endpoint for this yet. Deriving directly from the
+       scrape is the honest option until a company-agnostic question-generation function exists. */
     var custom = [];
-    /* try the deployed chat proxy for real generated questions */
-    try {
-      var summary = JSON.stringify({ company: co, categories: cats, brief: exp && exp.creative_brief }).slice(0, 3000);
-      var r = await sb("POST", "/functions/v1/chat-proxy", {
-        model: "claude-sonnet-4-6",
-        max_tokens: 600,
-        messages: [{ role: "user", content: "Write 3 short spoken interview questions a warm interviewer named Mary would ask a new hire about this company, grounded ONLY in this scraped data. Return a JSON array of 3 strings, nothing else.\n" + summary }]
-      }, "/functions/v1/chat-proxy (question generation)");
-      if (r.ok && r.data) {
-        var text = typeof r.data === "string" ? r.data
-          : (r.data.content && r.data.content[0] && r.data.content[0].text) || r.data.text || JSON.stringify(r.data);
-        var m = text.match(/\[[\s\S]*\]/);
-        if (m) {
-          var arr = JSON.parse(m[0]);
-          if (Array.isArray(arr)) custom = arr.filter(function (q) { return typeof q === "string" && q.length > 10; }).slice(0, 3);
-        }
-      }
-    } catch (e) { wire("err", "chat-proxy unavailable — deriving questions from scraped fields instead"); }
 
     var qs = [];
     qs.push({ text: "Welcome to the " + co + " pre-training. I read their website a few minutes ago, so this will be specific. First things first: what's your name?", type: "open", tag: "name" });
