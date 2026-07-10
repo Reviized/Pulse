@@ -21,6 +21,7 @@
     --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     --serif: "Didot", "Bodoni 72", Georgia, serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --brand-serif: var(--serif); /* replaced at runtime when the scrape detects the site's real display font */
   }
   [data-mode="inform"] { --accent: var(--inform); --accent-soft: rgba(75, 159, 255, 0.16); }
   [data-mode="train"]  { --accent: var(--train);  --accent-soft: rgba(255, 157, 69, 0.16); }
@@ -183,7 +184,7 @@
   .layout-tag { position: absolute; bottom: 18px; left: clamp(24px, 6vw, 96px); font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(156, 156, 166, 0.55); }
   .viewer-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; padding: 18px clamp(24px, 6vw, 96px) 18px clamp(112px, 12vw, 140px); pointer-events: none; }
   .viewer-bar > * { pointer-events: auto; }
-  .co-logo { font-family: var(--serif); font-size: 14px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--brand); }
+  .co-logo { font-family: var(--brand-serif); font-size: 14px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--brand); }
   .co-logo img { max-height: 30px; display: block; }
   .viewer-meta { display: flex; align-items: center; gap: 14px; }
   .slide-count { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.12em; }
@@ -198,7 +199,7 @@
   }
 
   .s-eyebrow { font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--brand); margin-bottom: 20px; }
-  .s-head { font-family: var(--serif); font-weight: 400; font-size: clamp(30px, 5vw, 58px); letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.14; margin: 0 0 22px; }
+  .s-head { font-family: var(--brand-serif); font-weight: 400; font-size: clamp(30px, 5vw, 58px); letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.14; margin: 0 0 22px; }
   .s-body { font-size: 16px; line-height: 1.75; color: var(--muted); max-width: 58ch; margin: 0; white-space: pre-line; }
   .t-center { text-align: center; display: flex; flex-direction: column; align-items: center; }
   .media-frame { position: absolute; inset: 0; background: radial-gradient(120% 90% at 70% 20%, color-mix(in srgb, var(--brand) 14%, transparent), transparent 55%), linear-gradient(160deg, #14120e 0%, #0A0A10 70%); }
@@ -1092,6 +1093,26 @@
     var m = JSON.stringify(v).match(/#[0-9a-fA-F]{6}/g);
     return m ? Array.from(new Set(m)) : [];
   }
+  var loadedGFonts = {};
+  function applyBrandFont(exp) {
+    var bf = exp && exp.brand_fonts;
+    var root = document.documentElement;
+    if (!bf || !bf.heading) { root.style.setProperty("--brand-serif", "var(--serif)"); return; }
+    if (bf.source === "google-fonts" && bf.google_font_family) {
+      var fam = bf.google_font_family;
+      if (!loadedGFonts[fam]) {
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://fonts.googleapis.com/css2?family=" + encodeURIComponent(fam).replace(/%20/g, "+") + ":wght@400;700&display=swap";
+        document.head.appendChild(link);
+        loadedGFonts[fam] = true;
+      }
+      root.style.setProperty("--brand-serif", "'" + fam + "', var(--serif)");
+    } else {
+      /* self-hosted or unrecognized webfont — use the declared name as a hint only, never invent one */
+      root.style.setProperty("--brand-serif", "'" + String(bf.heading).replace(/'/g, "") + "', var(--serif)");
+    }
+  }
   function normalizeExecs(v) {
     if (!v) return [];
     if (Array.isArray(v)) return v;
@@ -1321,6 +1342,7 @@
     /* scraped brand color drives the in-experience accent */
     var hexes = extractHexes(exp && exp.brand_colors);
     gid("viewer").style.setProperty("--brand", hexes[0] || "#C9A961");
+    applyBrandFont(exp);
 
     var coName = (exp && (exp.company_name || exp.name)) || "";
     var logo = exp && exp.brand_logo_url;
