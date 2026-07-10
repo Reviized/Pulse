@@ -1136,6 +1136,14 @@
       }
       return;
     }
+    var exactFont = exp && exp.design_spec && exp.design_spec.type && exp.design_spec.type.font_family;
+    if (exactFont) {
+      /* pulse-design-dna found this in the site's real HTML (Google Fonts link or CSS font-family) — try
+         loading it as-is; a 404 on the stylesheet just silently falls back to --serif, no visible error */
+      loadGoogleFont(exactFont);
+      root.style.setProperty("--brand-serif", "'" + String(exactFont).replace(/'/g, "") + "', var(--serif)");
+      return;
+    }
     if (displayCat && DISPLAY_FONT_MAP[displayCat]) {
       var fam = DISPLAY_FONT_MAP[displayCat];
       loadGoogleFont(fam);
