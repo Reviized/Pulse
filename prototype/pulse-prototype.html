@@ -22,6 +22,7 @@
     --serif: "Didot", "Bodoni 72", Georgia, serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     --brand-serif: var(--serif); /* replaced at runtime when the scrape detects the site's real display font */
+    --brand-case: uppercase; /* replaced at runtime from design_spec.type.case */
   }
   [data-mode="inform"] { --accent: var(--inform); --accent-soft: rgba(75, 159, 255, 0.16); }
   [data-mode="train"]  { --accent: var(--train);  --accent-soft: rgba(255, 157, 69, 0.16); }
@@ -184,7 +185,7 @@
   .layout-tag { position: absolute; bottom: 18px; left: clamp(24px, 6vw, 96px); font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(156, 156, 166, 0.55); }
   .viewer-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; padding: 18px clamp(24px, 6vw, 96px) 18px clamp(112px, 12vw, 140px); pointer-events: none; }
   .viewer-bar > * { pointer-events: auto; }
-  .co-logo { font-family: var(--brand-serif); font-size: 14px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--brand); }
+  .co-logo { font-family: var(--brand-serif); font-size: 14px; letter-spacing: 0.3em; text-transform: var(--brand-case); color: var(--brand); }
   .co-logo img { max-height: 30px; display: block; }
   .viewer-meta { display: flex; align-items: center; gap: 14px; }
   .slide-count { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.12em; }
@@ -199,7 +200,7 @@
   }
 
   .s-eyebrow { font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--brand); margin-bottom: 20px; }
-  .s-head { font-family: var(--brand-serif); font-weight: 400; font-size: clamp(30px, 5vw, 58px); letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.14; margin: 0 0 22px; }
+  .s-head { font-family: var(--brand-serif); font-weight: 400; font-size: clamp(30px, 5vw, 58px); letter-spacing: 0.05em; text-transform: var(--brand-case); line-height: 1.14; margin: 0 0 22px; }
   .s-body { font-size: 16px; line-height: 1.75; color: var(--muted); max-width: 58ch; margin: 0; white-space: pre-line; }
   .t-center { text-align: center; display: flex; flex-direction: column; align-items: center; }
   .media-frame { position: absolute; inset: 0; background: radial-gradient(120% 90% at 70% 20%, color-mix(in srgb, var(--brand) 14%, transparent), transparent 55%), linear-gradient(160deg, #14120e 0%, #0A0A10 70%); }
@@ -1077,7 +1078,7 @@
     var chips = [];
     var nm = exp && (exp.company_name || exp.name);
     if (nm) chips.push("<span class='insp'>Company · <b>" + escapeHtml(nm) + "</b></span>");
-    var hexes = extractHexes(exp && exp.brand_colors);
+    var hexes = extractHexes({ a: exp && exp.brand_colors, b: exp && exp.design_spec && exp.design_spec.palette });
     if (hexes.length) chips.push("<span class='insp'>Brand " + hexes.slice(0, 3).map(function (h) { return "<span class='swatch' style='background:" + h + "'></span>"; }).join("") + "</span>");
     var execs = normalizeExecs(exp && exp.executives);
     if (execs.length) chips.push("<span class='insp'>Executives · <b>" + execs.length + "</b></span>");
@@ -1093,25 +1094,55 @@
     var m = JSON.stringify(v).match(/#[0-9a-fA-F]{6}/g);
     return m ? Array.from(new Set(m)) : [];
   }
+  /* pulse-design-dna returns exp.design_spec.palette.accent (deployed contract) — brand_colors is a
+     legacy/unused field on the real backend, only ever populated in local mock testing. Prefer design_spec. */
+  function brandAccentHex(exp) {
+    var ds = exp && exp.design_spec && exp.design_spec.palette;
+    if (ds && ds.accent && /^#[0-9a-fA-F]{6}$/.test(ds.accent)) return ds.accent;
+    var hexes = extractHexes(exp && exp.brand_colors);
+    return hexes[0] || null;
+  }
+  /* maps pulse-design-dna's type.display taxonomy to the real Google Font each category names in its own schema */
+  var DISPLAY_FONT_MAP = {
+    "condensed-impact": "Anton",
+    "geometric-sans": "Poppins",
+    "humanist-sans": "Inter",
+    "elegant-serif": "Playfair Display",
+    "mono-tech": "Space Grotesk"
+  };
+  var CASE_MAP = { uppercase: "uppercase", title: "capitalize", sentence: "none" };
   var loadedGFonts = {};
+  function loadGoogleFont(fam) {
+    if (loadedGFonts[fam]) return;
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=" + encodeURIComponent(fam).replace(/%20/g, "+") + ":wght@400;700&display=swap";
+    document.head.appendChild(link);
+    loadedGFonts[fam] = true;
+  }
   function applyBrandFont(exp) {
-    var bf = exp && exp.brand_fonts;
     var root = document.documentElement;
-    if (!bf || !bf.heading) { root.style.setProperty("--brand-serif", "var(--serif)"); return; }
-    if (bf.source === "google-fonts" && bf.google_font_family) {
-      var fam = bf.google_font_family;
-      if (!loadedGFonts[fam]) {
-        var link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = "https://fonts.googleapis.com/css2?family=" + encodeURIComponent(fam).replace(/%20/g, "+") + ":wght@400;700&display=swap";
-        document.head.appendChild(link);
-        loadedGFonts[fam] = true;
+    var bf = exp && exp.brand_fonts;
+    var displayCat = exp && exp.design_spec && exp.design_spec.type && exp.design_spec.type.display;
+    var headCase = exp && exp.design_spec && exp.design_spec.type && exp.design_spec.type.case;
+    root.style.setProperty("--brand-case", CASE_MAP[headCase] || "uppercase");
+    if (bf && bf.heading) {
+      if (bf.source === "google-fonts" && bf.google_font_family) {
+        loadGoogleFont(bf.google_font_family);
+        root.style.setProperty("--brand-serif", "'" + bf.google_font_family + "', var(--serif)");
+      } else {
+        /* self-hosted or unrecognized webfont — use the declared name as a hint only, never invent one */
+        root.style.setProperty("--brand-serif", "'" + String(bf.heading).replace(/'/g, "") + "', var(--serif)");
       }
-      root.style.setProperty("--brand-serif", "'" + fam + "', var(--serif)");
-    } else {
-      /* self-hosted or unrecognized webfont — use the declared name as a hint only, never invent one */
-      root.style.setProperty("--brand-serif", "'" + String(bf.heading).replace(/'/g, "") + "', var(--serif)");
+      return;
     }
+    if (displayCat && DISPLAY_FONT_MAP[displayCat]) {
+      var fam = DISPLAY_FONT_MAP[displayCat];
+      loadGoogleFont(fam);
+      root.style.setProperty("--brand-serif", "'" + fam + "', var(--serif)");
+      return;
+    }
+    root.style.setProperty("--brand-serif", "var(--serif)");
   }
   function normalizeExecs(v) {
     if (!v) return [];
@@ -1340,8 +1371,7 @@
     viewerExecs = normalizeExecs(exp && exp.executives);
 
     /* scraped brand color drives the in-experience accent */
-    var hexes = extractHexes(exp && exp.brand_colors);
-    gid("viewer").style.setProperty("--brand", hexes[0] || "#C9A961");
+    gid("viewer").style.setProperty("--brand", brandAccentHex(exp) || "#C9A961");
     applyBrandFont(exp);
 
     var coName = (exp && (exp.company_name || exp.name)) || "";
@@ -1651,11 +1681,12 @@
       session: "loc-" + Math.random().toString(36).slice(2, 10)
     };
     /* brand the room with the scraped identity */
-    var hexes = extractHexes(exp && exp.brand_colors);
-    if (hexes[0]) {
+    var accentHex = brandAccentHex(exp);
+    if (accentHex) {
       document.querySelector(".mary-fig .halo").style.background =
-        "radial-gradient(circle at 32% 30%, color-mix(in srgb, " + hexes[0] + " 65%, white), " + hexes[0] + " 62%, color-mix(in srgb, " + hexes[0] + " 45%, black))";
+        "radial-gradient(circle at 32% 30%, color-mix(in srgb, " + accentHex + " 65%, white), " + accentHex + " 62%, color-mix(in srgb, " + accentHex + " 45%, black))";
     }
+    applyBrandFont(exp);
     gid("callpill").textContent = "Video interview · " + co;
     gid("callsession").textContent = "Session: " + trainCtx.session + " · experience " + String(exp.id).slice(0, 8);
     gid("youname").textContent = "You";
