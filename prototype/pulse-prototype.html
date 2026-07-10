@@ -561,14 +561,12 @@
 <!-- TRAIN · ENTRY -->
 <section class="screen" id="trainentry" aria-label="Train mode entry">
   <span class="tag-chip"><span class="dot"></span>Train mode</span>
-  <h1 class="hero-title">First, a quick conversation</h1>
-  <p class="sub">Before the training starts, Mary sits down with you for a short one-on-one. Know the material already? Prove it, and your hour gets a lot shorter.</p>
-  <div class="exp-panel" style="margin-top: 40px; text-align: center;">
-    <p class="sub" style="font-size: 13px;">Vantage Capital Group · New Hire Onboarding · 8 sections · 62 min</p>
-  </div>
-  <form class="input-row" id="trainform" style="width: min(560px, 88vw);">
-    <input type="text" class="glass-input" id="learnername" placeholder="Your first name" aria-label="Your first name" autocomplete="off">
-    <button class="pill-btn pulsing" type="submit">Start the interview</button>
+  <h1 class="hero-title">Whose training is this?</h1>
+  <p class="sub">Drop in the company's website. Pulse scrapes it live, builds the training deck in their brand and tone, and Mary opens with a short one-on-one built from what the site actually says.</p>
+  <div class="conn-chip" id="tconnchip"><span class="cdot"></span><span id="tconntext">CONNECTING TO BACKEND…</span></div>
+  <form class="input-row" id="trainform" style="width: min(620px, 88vw);">
+    <input type="text" class="glass-input" id="trainurl" placeholder="https://theircompany.com" aria-label="Company website URL" autocomplete="off" spellcheck="false">
+    <button class="pill-btn pulsing" type="submit">Create Pulse</button>
   </form>
   <p class="field-error" id="trainerror" role="alert"></p>
 </section>
@@ -579,7 +577,8 @@
     <div class="call-bar">
       <span class="live-dot">LIVE</span>
       <span class="call-timer" id="calltimer">00:00</span>
-      <span class="call-pill">Video interview</span>
+      <span class="call-pill" id="callpill">Video interview</span>
+      <button class="ghost-btn" id="voicetoggle" style="padding: 7px 13px; font-size: 11px;">🔊 Voice on</button>
       <button class="end-btn" id="endcall">End call</button>
     </div>
     <div class="call-tiles">
@@ -602,16 +601,17 @@
     <div class="answer-zone">
       <div class="chip-row" id="chiprow"></div>
       <form class="ans-form" id="ansform">
-        <input type="text" id="ansinput" placeholder="Answer out loud — typed here in the prototype" aria-label="Your answer" autocomplete="off">
+        <button type="button" id="ansmic" aria-label="Answer by voice" style="display: none; background: var(--accent-soft); color: var(--accent); border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent);">🎙</button>
+        <input type="text" id="ansinput" placeholder="Answer out loud, or type here" aria-label="Your answer" autocomplete="off">
         <button type="submit" aria-label="Send answer">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h15M13 5l7 7-7 7"/></svg>
         </button>
       </form>
-      <p class="ans-note">SIMULATED · the live build is a spoken conversation, transcript captured per session</p>
+      <p class="ans-note" id="ansnote">QUESTIONS BUILT FROM THE LIVE SCRAPE · TRANSCRIPT RECORDED</p>
     </div>
     <div class="call-foot">
-      <span>Session ID: 37fab96e…</span>
-      <span>Reviized Interviewer · persona pd887940ca78 · Powered by Tavus</span>
+      <span id="callsession">Session: local</span>
+      <span>Reviized Interviewer · persona pd887940ca78 · Tavus replica in the live build</span>
     </div>
   </div>
 </section>
@@ -629,48 +629,27 @@
   </div>
 </section>
 
-<!-- TRAIN · KNOWLEDGE PROFILE -->
+<!-- TRAIN · KNOWLEDGE PROFILE (built from the real conversation) -->
 <section class="screen" id="profile" aria-label="Knowledge profile and routing">
   <div class="prof-wrap">
     <div class="prof-head">
-      <span class="tag-chip"><span class="dot"></span>Pre-training interview · complete</span>
+      <span class="tag-chip"><span class="dot"></span><span id="profcompany">Pre-training interview · complete</span></span>
       <h1 class="prof-title">Your training, rebuilt</h1>
     </div>
     <div class="verdict">
-      <div class="path">Fast Track</div>
-      <div class="time"><b>62 min → 18 min</b> · 3 sections skipped · 2 skimmed · 3 in full</div>
+      <div class="path" id="profpath">—</div>
+      <div class="time" id="proftime"></div>
     </div>
-    <p class="welcome-quote" id="welcomequote">
-      "You've clearly done this before. We're skipping the definitions, skimming the operations refresher, and spending your time where it counts: compliance and the Vantage way of talking to clients. Eighteen minutes. Let's go."
-      <span class="wq-who">Your personalized welcome · voiced in the live build</span>
-    </p>
-    <div class="sect-label">What you already know</div>
-    <div class="know-row"><span class="kname">Deal Structures</span><span class="bar"><i style="width: 85%"></i></span><span class="kpct">85%</span></div>
-    <div class="know-row"><span class="kname">Portfolio Operations</span><span class="bar"><i style="width: 70%"></i></span><span class="kpct">70%</span></div>
-    <div class="know-row"><span class="kname">Compliance</span><span class="bar"><i style="width: 40%"></i></span><span class="kpct">40%</span></div>
-    <div class="know-row"><span class="kname">Client Communication</span><span class="bar"><i style="width: 20%"></i></span><span class="kpct">n/a</span></div>
+    <p class="welcome-quote" id="welcomequote"></p>
     <div class="sect-label">Signals from the conversation</div>
-    <div class="signal-row">
-      <span class="signal">Confidence · <b>High</b></span>
-      <span class="signal">Engagement · <b>High</b></span>
-      <span class="signal">Motivation · <b>Wants field-ready speed</b></span>
-      <span class="signal">Flagged · <b>Compliance depth</b></span>
+    <div class="signal-row" id="profsignals"></div>
+    <div class="sect-label">Your route through the content</div>
+    <div id="modlist"></div>
+    <div class="prof-cta" style="gap: 10px; flex-wrap: wrap;">
+      <button class="pill-btn pulsing" id="begintraining">Open the deck</button>
+      <button class="ghost-btn" id="dltranscript">Download transcript</button>
     </div>
-    <div class="sect-label">Your route through the module</div>
-    <div id="modlist">
-      <div class="mod-row skipped"><span><span class="mname">1 · What Is Private Capital</span><span class="mins">8 min</span></span><span class="badge b-skip">Skip</span></div>
-      <div class="mod-row skipped"><span><span class="mname">2 · Deal Structures at Vantage</span><span class="mins">10 min</span></span><span class="badge b-skip">Skip</span></div>
-      <div class="mod-row skipped"><span><span class="mname">3 · Fund Mechanics</span><span class="mins">7 min</span></span><span class="badge b-skip">Skip</span></div>
-      <div class="mod-row"><span><span class="mname">4 · Portfolio Operations Playbook</span><span class="mins">9 → 3 min</span></span><span class="badge b-skim">Skim</span></div>
-      <div class="mod-row"><span><span class="mname">5 · The First 90 Days With a Founder</span><span class="mins">8 → 3 min</span></span><span class="badge b-skim">Skim</span></div>
-      <div class="mod-row"><span><span class="mname">6 · Compliance: KYC and Accreditation</span><span class="mins">7 min</span></span><span class="badge b-full">Full</span></div>
-      <div class="mod-row"><span><span class="mname">7 · Compliance: Marketing Rules</span><span class="mins">6 min</span></span><span class="badge b-full">Full</span></div>
-      <div class="mod-row"><span><span class="mname">8 · Talking to Clients, the Vantage Way</span><span class="mins">7 min</span></span><span class="badge b-full">Full + checkpoint</span></div>
-    </div>
-    <div class="prof-cta">
-      <button class="pill-btn pulsing" id="begintraining">Begin training · 18 min</button>
-    </div>
-    <p class="prof-note" id="trainnote">The customized module player is the next build phase. This routing is what it will receive.</p>
+    <p class="prof-note" id="trainnote"></p>
   </div>
 </section>
 
@@ -922,17 +901,22 @@
       var mode = card.getAttribute("data-mode");
       setMode(mode);
       if (mode === "inform") { enterUrlEntry(); }
-      else if (mode === "train") { show("trainentry"); setTimeout(function () { gid("learnername").focus(); }, 300); }
+      else if (mode === "train") {
+        show("trainentry");
+        setTimeout(function () { gid("trainurl").focus(); }, 300);
+        healthCheck("tconnchip", "tconntext");
+      }
     });
   });
   gid("openmanager").addEventListener("click", function () { managerReturn = "modes"; setMode("inform"); enterManager(); });
 
   /* ============ connection + existing experiences ============ */
   var connected = null;
-  async function healthCheck() {
-    var chip = gid("connchip");
+  async function healthCheck(chipId, textId) {
+    var chip = gid(chipId || "connchip");
+    var textEl = gid(textId || "conntext");
     chip.className = "conn-chip";
-    gid("conntext").textContent = "CONNECTING TO " + BACKEND.replace(/^https?:\/\//, "").toUpperCase() + "…";
+    textEl.textContent = "CONNECTING TO " + BACKEND.replace(/^https?:\/\//, "").toUpperCase() + "…";
     try {
       var res = await fetch(BACKEND + "/rest/v1/experiences?select=id&limit=1", { headers: Object.assign({}, HDRS, { "Prefer": "count=exact" }) });
       if (res.ok) {
@@ -940,20 +924,20 @@
         var range = res.headers.get("content-range") || "";
         var total = range.split("/")[1] || "?";
         chip.classList.add("ok");
-        gid("conntext").textContent = "LIVE BACKEND CONNECTED · " + total + " EXPERIENCES IN THE DATABASE";
+        textEl.textContent = "LIVE BACKEND CONNECTED · " + total + " EXPERIENCES IN THE DATABASE";
         gid("protoChip").textContent = "PULSE PROTOTYPE · LIVE";
         gid("protoChip").className = "proto-chip live";
         return true;
       }
       connected = false;
       chip.classList.add("err");
-      gid("conntext").textContent = "BACKEND REFUSED: HTTP " + res.status + " · CHECK ANON KEY / RLS";
+      textEl.textContent = "BACKEND REFUSED: HTTP " + res.status + " · CHECK ANON KEY / RLS";
       gid("protoChip").className = "proto-chip dead";
       return false;
     } catch (err) {
       connected = false;
       chip.classList.add("err");
-      gid("conntext").textContent = "BACKEND UNREACHABLE FROM THIS CONTEXT";
+      textEl.textContent = "BACKEND UNREACHABLE FROM THIS CONTEXT";
       gid("protoChip").textContent = "PULSE PROTOTYPE · OFFLINE";
       gid("protoChip").className = "proto-chip dead";
       gid("csperr").textContent = String(err);
@@ -1041,10 +1025,12 @@
   var pipelineAbort = false;
   var pendingExp = null;
 
-  function buildPipeUI() {
+  function buildPipeUI(mode) {
     var el = gid("pipesteps");
     el.innerHTML = "";
-    PIPE_STEPS.forEach(function (s, i) {
+    var steps = PIPE_STEPS.slice();
+    if (mode === "train") steps.push({ key: "questions", label: "Write the interview questions from the scrape", provider: "chat-proxy · claude" });
+    steps.forEach(function (s, i) {
       var row = document.createElement("div");
       row.className = "pipe-step";
       row.id = "ps-" + s.key;
@@ -1104,15 +1090,15 @@
       if (u.hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)) { err.textContent = "Public websites only."; return; }
     } catch (ex) { err.textContent = "That does not look like a URL."; return; }
     err.textContent = "";
-    runLivePipeline(raw);
+    runLivePipeline(raw, "inform");
   });
   gid("piperetry") && gid("piperetry").addEventListener("click", function () { enterUrlEntry(); });
 
-  async function runLivePipeline(url) {
+  async function runLivePipeline(url, mode) {
     pipelineAbort = false;
-    gid("pipeurl").textContent = url + "  ·  " + BACKEND.replace(/^https?:\/\//, "");
+    gid("pipeurl").textContent = url + "  ·  " + BACKEND.replace(/^https?:\/\//, "") + "  ·  mode: " + mode;
     show("pipeline");
-    buildPipeUI();
+    buildPipeUI(mode);
 
     var expId = null;
     var exp = null;
@@ -1120,10 +1106,10 @@
     try {
       /* STEP 1: create — try the deployed edge function, fall back to direct insert */
       stepState("create", "running");
-      var r = await sb("POST", "/functions/v1/pulse-experiences", { url: url, mode: "inform" });
+      var r = await sb("POST", "/functions/v1/pulse-experiences", { url: url, mode: mode });
       if (r.ok && r.data) expId = r.data.experience_id || r.data.id || (r.data.data && r.data.data.id) || null;
       if (!expId) {
-        var r2 = await sb("POST", "/functions/v1/pulse-experiences", { action: "create", url: url, mode: "inform" });
+        var r2 = await sb("POST", "/functions/v1/pulse-experiences", { action: "create", url: url, mode: mode });
         if (r2.ok && r2.data) expId = r2.data.experience_id || r2.data.id || (r2.data.data && r2.data.data.id) || null;
       }
       if (!expId) {
@@ -1132,7 +1118,7 @@
         var r3 = await fetch(BACKEND + "/rest/v1/experiences", {
           method: "POST",
           headers: Object.assign({}, HDRS, { "Prefer": "return=representation" }),
-          body: JSON.stringify({ source_url: url, mode: "inform", status: "draft", name: host })
+          body: JSON.stringify({ source_url: url, mode: mode, status: "draft", name: host })
         });
         var t3 = await r3.text();
         wire(r3.ok ? "ok" : "err", "← " + r3.status + " " + t3.slice(0, 300));
@@ -1170,7 +1156,11 @@
         if (!flags.scrape && !nudged.scrape && elapsed > 8000) { nudged.scrape = true; await sb("POST", "/functions/v1/pulse-scrape", { experience_id: expId, url: url }); }
         if (flags.scrape && !flags.dna && !nudged.dna) { nudged.dna = true; await sb("POST", "/functions/v1/pulse-design-dna", { experience_id: expId }); }
         if (flags.scrape && !flags.brief && !nudged.brief && (flags.dna || elapsed > 60000)) { nudged.brief = true; await sb("POST", "/functions/v1/pulse-brief", { experience_id: expId }); }
-        if (flags.brief && !flags.slides && !nudged.slides) { nudged.slides = true; await sb("POST", "/functions/v1/pulse-slides-generate", { experience_id: expId }); }
+        if (flags.brief && !flags.slides && !nudged.slides) {
+          nudged.slides = true;
+          await sb("POST", "/functions/v1/" + (mode === "train" ? "pulse-train-generate" : "pulse-slides-generate"), { experience_id: expId });
+          if (mode === "train") await sb("POST", "/functions/v1/pulse-slides-generate", { experience_id: expId });
+        }
 
         await new Promise(function (res) { setTimeout(res, 2500); });
       }
@@ -1178,6 +1168,14 @@
       if (!slides.length) throw new Error("Pipeline finished polling with 0 slides after " + Math.round((Date.now() - started) / 1000) + "s.");
 
       pendingExp = { exp: exp, slides: slides };
+      if (mode === "train") {
+        stepState("questions", "running");
+        var qs = await buildQuestions(exp, slides);
+        stepState("questions", "done");
+        wire("ok", qs.length + " interview questions staged");
+        setTimeout(function () { startLiveInterview(exp, slides, qs); }, 700);
+        return;
+      }
       gid("gatecompany").textContent = (exp && (exp.company_name || exp.name)) || new URL(url).hostname;
       setTimeout(function () {
         show("gate");
@@ -1454,26 +1452,121 @@
     setTimeout(function () { addMsg("rep", "Noted. When the conversational layer is wired, this answers in the presenter's voice from the scraped corpus."); }, 500);
   });
 
-  /* ============ TRAIN (simulated, labeled) ============ */
-  var learner = "there";
+  /* ============ TRAIN (scrape-first, live) ============ */
+  var trainCtx = null;
+  var voiceOn = true;
+  var timerId = null, seconds = 0;
+  var recog = null;
+
   gid("trainform").addEventListener("submit", function (e) {
     e.preventDefault();
-    var name = gid("learnername").value.trim();
-    if (!name) { gid("trainerror").textContent = "Mary likes to know who she is talking to. First name, please."; return; }
-    gid("trainerror").textContent = "";
-    learner = name.charAt(0).toUpperCase() + name.slice(1);
-    gid("youname").textContent = learner;
-    startInterview();
+    var raw = gid("trainurl").value.trim();
+    var err = gid("trainerror");
+    if (!raw) { err.textContent = "Type the company's website first."; return; }
+    if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
+    try {
+      var u = new URL(raw);
+      if (u.hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)) { err.textContent = "Public websites only."; return; }
+    } catch (ex) { err.textContent = "That does not look like a URL."; return; }
+    err.textContent = "";
+    runLivePipeline(raw, "train");
   });
-  var QUESTIONS = [
-    { mary: function () { return learner + ", good to meet you. Before we throw an hour of onboarding at you, I want to find out what you already know. So, first: what were you doing before you joined Vantage?"; }, type: "open", ack: "Good. That gives me a baseline to work from." },
-    { mary: function () { return "Now, in your own words: when a founder takes a recapitalization instead of a full sale, what are they usually trying to accomplish?"; }, type: "open", ack: "That's a strong answer. You've clearly been near these deals before." },
-    { mary: function () { return "Scenario for you. A portfolio company misses its quarter and the founder calls you first. What's the Vantage move?"; }, type: "chips", chips: ["Operating partner in, same week", "Hold for the board cycle", "Depends on covenant terms"], ack: "Right instinct. Speed is the whole point of the playbook." },
-    { mary: function () { return "Honest gut check: how confident are you on the compliance side, KYC, accreditation, marketing rules? One to five."; }, type: "chips", chips: ["1", "2", "3", "4", "5"], ack: "Appreciate the honesty. That tells me exactly where your time should go." },
-    { mary: function () { return "What would make this training actually worth your time? What do you want to walk out with?"; }, type: "open", ack: "Noted. I'm building this around getting you field-ready fast." },
-    { mary: function () { return "Last one. Anything about the role you're quietly worried about? That stays between us and the training plan."; }, type: "open", ack: "Thank you for that. It goes into the plan, not into a report." }
-  ];
-  var qIdx = 0, timerId = null, seconds = 0;
+
+  function categoriesFrom(exp, slides) {
+    var out = [];
+    var cc = exp && exp.content_categories;
+    if (cc) {
+      if (Array.isArray(cc)) out = cc.map(function (c) { return typeof c === "string" ? c : (c.name || c.category || ""); });
+      else if (typeof cc === "object") out = Object.keys(cc);
+    }
+    if (!out.length && slides) {
+      slides.forEach(function (s) {
+        var e = field(s, ["eyebrow", "headline", "title"]);
+        if (e) out.push(String(e));
+      });
+    }
+    out = out.map(function (s) { return String(s).replace(/[_•·]+/g, " ").trim(); })
+      .filter(function (s) { return s && s.length < 40; });
+    return Array.from(new Set(out)).slice(0, 5);
+  }
+
+  async function buildQuestions(exp, slides) {
+    var co = (exp && (exp.company_name || exp.name)) || "the company";
+    var cats = categoriesFrom(exp, slides);
+    var custom = [];
+    /* try the deployed chat proxy for real generated questions */
+    try {
+      var summary = JSON.stringify({ company: co, categories: cats, brief: exp && exp.creative_brief }).slice(0, 3000);
+      var r = await sb("POST", "/functions/v1/chat-proxy", {
+        model: "claude-sonnet-4-6",
+        max_tokens: 600,
+        messages: [{ role: "user", content: "Write 3 short spoken interview questions a warm interviewer named Mary would ask a new hire about this company, grounded ONLY in this scraped data. Return a JSON array of 3 strings, nothing else.\n" + summary }]
+      }, "/functions/v1/chat-proxy (question generation)");
+      if (r.ok && r.data) {
+        var text = typeof r.data === "string" ? r.data
+          : (r.data.content && r.data.content[0] && r.data.content[0].text) || r.data.text || JSON.stringify(r.data);
+        var m = text.match(/\[[\s\S]*\]/);
+        if (m) {
+          var arr = JSON.parse(m[0]);
+          if (Array.isArray(arr)) custom = arr.filter(function (q) { return typeof q === "string" && q.length > 10; }).slice(0, 3);
+        }
+      }
+    } catch (e) { wire("err", "chat-proxy unavailable — deriving questions from scraped fields instead"); }
+
+    var qs = [];
+    qs.push({ text: "Welcome to the " + co + " pre-training. I read their website a few minutes ago, so this will be specific. First things first: what's your name?", type: "open", tag: "name" });
+    if (custom.length) {
+      custom.forEach(function (c) { qs.push({ text: c, type: "open", tag: "generated" }); });
+    } else {
+      qs.push({ text: "In your own words: what does " + co + " actually do for its customers?", type: "open", tag: "core" });
+      if (cats.length >= 2) qs.push({ text: "Looking at " + co + "'s world, which of these do you know best?", type: "chips", chips: cats.slice(0, 4), tag: "strength" });
+    }
+    qs.push({ text: "Gut check: how confident are you on the rest of it, one to five?", type: "chips", chips: ["1", "2", "3", "4", "5"], tag: "confidence" });
+    qs.push({ text: "Last one. What part of this job are you quietly worried about? That stays between us and the plan.", type: "open", tag: "worry" });
+    return qs;
+  }
+
+  function speak(text) {
+    if (!voiceOn) return;
+    try {
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.03;
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+  gid("voicetoggle").addEventListener("click", function () {
+    voiceOn = !voiceOn;
+    this.textContent = voiceOn ? "🔊 Voice on" : "🔇 Voice off";
+    if (!voiceOn) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+  });
+
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  gid("ansmic").addEventListener("click", function () {
+    if (!SR) return;
+    var btn = this;
+    try {
+      if (recog) { recog.stop(); recog = null; btn.style.filter = ""; return; }
+      recog = new SR();
+      recog.lang = "en-US";
+      recog.interimResults = true;
+      btn.style.filter = "brightness(1.6)";
+      recog.onresult = function (ev) {
+        var t = "";
+        for (var i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript;
+        gid("ansinput").value = t;
+      };
+      recog.onend = function () {
+        btn.style.filter = "";
+        recog = null;
+        var v = gid("ansinput").value.trim();
+        if (v) { gid("ansinput").value = ""; liveAnswer(v); }
+      };
+      recog.onerror = function () { btn.style.filter = ""; recog = null; };
+      recog.start();
+    } catch (e) { btn.style.filter = ""; recog = null; }
+  });
+
   function startTimer() {
     stopTimer(); seconds = 0;
     timerId = setInterval(function () {
@@ -1481,102 +1574,170 @@
       gid("calltimer").textContent = String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
     }, 1000);
   }
-  function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } }
-  function askQuestion() {
-    var q = QUESTIONS[qIdx];
-    gid("marytext").textContent = q.mary();
+  function stopTimer() {
+    if (timerId) { clearInterval(timerId); timerId = null; }
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    try { if (recog) { recog.stop(); recog = null; } } catch (e) {}
+  }
+
+  function startLiveInterview(exp, slides, questions) {
+    var co = (exp && (exp.company_name || exp.name)) || "the company";
+    trainCtx = {
+      exp: exp, slides: slides, questions: questions,
+      transcript: [], learner: "", confidence: 0, worry: "", strength: "",
+      company: co, qIdx: 0, qaOk: false,
+      session: "loc-" + Math.random().toString(36).slice(2, 10)
+    };
+    /* brand the room with the scraped identity */
+    var hexes = extractHexes(exp && exp.brand_colors);
+    if (hexes[0]) {
+      document.querySelector(".mary-fig .halo").style.background =
+        "radial-gradient(circle at 32% 30%, color-mix(in srgb, " + hexes[0] + " 65%, white), " + hexes[0] + " 62%, color-mix(in srgb, " + hexes[0] + " 45%, black))";
+    }
+    gid("callpill").textContent = "Video interview · " + co;
+    gid("callsession").textContent = "Session: " + trainCtx.session + " · experience " + String(exp.id).slice(0, 8);
+    gid("youname").textContent = "You";
+    show("interview");
+    startTimer();
+    setTimeout(function () { askLive(); }, reduced ? 100 : 650);
+  }
+
+  function askLive() {
+    var q = trainCtx.questions[trainCtx.qIdx];
+    gid("marytext").textContent = q.text;
     gid("ackline").textContent = "";
     gid("marytile").classList.add("speaking");
+    speak(q.text);
+    qaWrite("interviewer", q.text);
     var chipRow = gid("chiprow");
     chipRow.innerHTML = "";
     if (q.type === "chips") {
       q.chips.forEach(function (c) {
         var b = document.createElement("button");
         b.type = "button"; b.className = "ans-chip"; b.textContent = c;
-        b.addEventListener("click", function () { answer(c); });
+        b.addEventListener("click", function () { liveAnswer(c); });
         chipRow.appendChild(b);
       });
       gid("ansform").style.display = "none";
     } else {
       gid("ansform").style.display = "flex";
+      gid("ansmic").style.display = SR ? "grid" : "none";
       gid("ansinput").focus();
     }
   }
-  function answer(text) {
-    if (!text) return;
-    var q = QUESTIONS[qIdx];
+
+  var ACKS = ["Got it.", "Noted — that goes in the plan.", "Helpful, thank you.", "Understood."];
+  function liveAnswer(text) {
+    if (!text || !trainCtx) return;
+    var q = trainCtx.questions[trainCtx.qIdx];
+    trainCtx.transcript.push({ role: "visitor", content: text, tag: q.tag, at: gid("calltimer").textContent });
+    qaWrite("visitor", text);
+    var ack = ACKS[trainCtx.qIdx % ACKS.length];
+    if (q.tag === "name") {
+      var nm = text.trim().split(/\s+/)[0];
+      trainCtx.learner = nm.charAt(0).toUpperCase() + nm.slice(1);
+      gid("youname").textContent = trainCtx.learner;
+      ack = "Good to meet you, " + trainCtx.learner + ".";
+    }
+    if (q.tag === "confidence") trainCtx.confidence = parseInt(text, 10) || 0;
+    if (q.tag === "worry") trainCtx.worry = text;
+    if (q.tag === "strength") trainCtx.strength = text;
     gid("marytile").classList.remove("speaking");
-    gid("ackline").textContent = "Mary: " + q.ack;
+    gid("ackline").textContent = "Mary: " + ack;
+    speak(ack);
     gid("chiprow").innerHTML = "";
     gid("ansform").style.display = "none";
-    qIdx++;
-    setTimeout(function () { if (qIdx >= QUESTIONS.length) endInterview(); else askQuestion(); }, reduced ? 300 : 1500);
+    trainCtx.qIdx++;
+    setTimeout(function () {
+      if (trainCtx.qIdx >= trainCtx.questions.length) endInterview();
+      else askLive();
+    }, reduced ? 300 : 1500);
   }
   gid("ansform").addEventListener("submit", function (e) {
     e.preventDefault();
     var v = gid("ansinput").value.trim();
     if (!v) return;
     gid("ansinput").value = "";
-    answer(v);
+    liveAnswer(v);
   });
-  function startInterview() {
-    qIdx = 0;
-    show("interview");
-    startTimer();
-    setTimeout(askQuestion, reduced ? 100 : 650);
-  }
   gid("endcall").addEventListener("click", endInterview);
-  var PROFILE_STEPS = [
-    { label: "Pulling the interview transcript", provider: "tavus · pd887940ca78", ms: 1200, log: "6 exchanges captured from session 37fab96e" },
-    { label: "Conversation analysis: tone and signals", provider: "elevenlabs", ms: 1300, log: "confidence high, engagement high, one flagged concern" },
-    { label: "Scoring knowledge against module tags", provider: "claude sonnet", ms: 1400, log: "deal structures 85, operations 70, compliance 40" },
-    { label: "Routing the module", provider: "pulse engine", ms: 850, log: "FAST TRACK: skip 3, skim 2, full 3 · 62 min → 18 min" },
-    { label: "Writing your personalized welcome", provider: "claude sonnet", ms: 950, log: "welcome script staged for narration" }
-  ];
-  function buildSteps(el, steps) {
-    el.innerHTML = "";
-    steps.forEach(function (s, i) {
-      var row = document.createElement("div");
-      row.className = "pipe-step";
-      row.innerHTML = '<span class="mark">' + String(i + 1).padStart(2, "0") + "</span>" +
-        '<span class="label">' + s.label + "</span>" + '<span class="provider">' + s.provider + "</span>";
-      el.appendChild(row);
-    });
+
+  function qaWrite(role, content) {
+    if (!trainCtx || !trainCtx.exp || !trainCtx.exp.id) return;
+    fetch(BACKEND + "/rest/v1/qa_messages", {
+      method: "POST", headers: HDRS,
+      body: JSON.stringify({ experience_id: trainCtx.exp.id, role: role, content: content })
+    }).then(function (r) { if (r.ok) trainCtx.qaOk = true; }).catch(function () {});
   }
-  function runSteps(el, logEl, steps, onDone) {
-    var rows = el.children;
-    logEl.innerHTML = "";
-    for (var k = 0; k < rows.length; k++) { rows[k].className = "pipe-step"; rows[k].querySelector(".mark").textContent = String(k + 1).padStart(2, "0"); }
-    var i = 0;
-    (function next() {
-      if (i > 0) {
-        rows[i - 1].classList.remove("running");
-        rows[i - 1].classList.add("done");
-        rows[i - 1].querySelector(".mark").textContent = "ok";
-        var line = document.createElement("div");
-        line.innerHTML = '<span class="ok">ok</span> ' + steps[i - 1].log;
-        logEl.appendChild(line);
-        while (logEl.children.length > 4) logEl.removeChild(logEl.firstChild);
-      }
-      if (i >= rows.length) { setTimeout(onDone, 550); return; }
-      rows[i].classList.add("running");
-      var delay = reduced ? 110 : steps[i].ms;
-      i++;
-      setTimeout(next, delay);
-    })();
-  }
-  buildSteps(gid("profsteps"), PROFILE_STEPS);
+
   function endInterview() {
     stopTimer();
-    show("profilebuild");
-    runSteps(gid("profsteps"), gid("proflog"), PROFILE_STEPS, function () {
-      gid("welcomequote").firstChild.textContent =
-        '"' + learner + ", you've clearly done this before. We're skipping the definitions, skimming the operations refresher, and spending your time where it counts: compliance and the Vantage way of talking to clients. Eighteen minutes. Let's go.\" ";
-      show("profile");
-    });
+    if (!trainCtx) { show("modes"); return; }
+    buildProfile();
+    show("profile");
   }
+
+  function buildProfile() {
+    var c = trainCtx.confidence || 3;
+    var co = trainCtx.company;
+    var learner = trainCtx.learner || "there";
+    var path = c >= 4 ? "Fast Track" : (c === 3 ? "Standard" : "Foundational");
+    gid("profcompany").textContent = co + " · interview complete";
+    gid("profpath").textContent = path;
+
+    var areas = categoriesFrom(trainCtx.exp, trainCtx.slides);
+    if (!areas.length) areas = ["The story", "What they do", "Proof", "The conversation"];
+    var worryLc = (trainCtx.worry || "").toLowerCase();
+    var strengthLc = (trainCtx.strength || "").toLowerCase();
+    var full = 0, skim = 0, skip = 0;
+    var rows = areas.map(function (a, i) {
+      var alc = a.toLowerCase();
+      var badge, cls, rowCls = "";
+      if (worryLc && (worryLc.indexOf(alc) >= 0 || alc.indexOf(worryLc.split(" ")[0] || "§") >= 0)) { badge = "Full + checkpoint"; cls = "b-full"; full++; }
+      else if (strengthLc && alc === strengthLc) { badge = "Skip"; cls = "b-skip"; rowCls = "skipped"; skip++; }
+      else if (c >= 4) { badge = "Skim"; cls = "b-skim"; skim++; }
+      else if (c === 3) { if (i < 2) { badge = "Full"; cls = "b-full"; full++; } else { badge = "Skim"; cls = "b-skim"; skim++; } }
+      else { badge = "Full"; cls = "b-full"; full++; }
+      return "<div class='mod-row " + rowCls + "'><span><span class='mname'>" + (i + 1) + " · " + escapeHtml(a) + "</span></span><span class='badge " + cls + "'>" + badge + "</span></div>";
+    });
+    if (trainCtx.worry && full === 0) {
+      rows.push("<div class='mod-row'><span><span class='mname'>" + (areas.length + 1) + " · Flagged: " + escapeHtml(trainCtx.worry.slice(0, 44)) + "</span></span><span class='badge b-full'>Full + checkpoint</span></div>");
+      full++;
+    }
+    gid("modlist").innerHTML = rows.join("");
+    gid("proftime").innerHTML = "<b>" + rows.length + " sections</b> · " + full + " in full · " + skim + " skimmed · " + skip + " skipped · routed from your answers";
+
+    var focus = trainCtx.worry ? trainCtx.worry.slice(0, 50) : "the parts you have not seen yet";
+    gid("welcomequote").innerHTML = "\"" + escapeHtml(learner) + ", welcome to " + escapeHtml(co) +
+      ". Based on our conversation, we are going straight at " + escapeHtml(focus) +
+      " and skimming what you already know. The deck is yours.\"" +
+      "<span class='wq-who'>Your personalized welcome · voiced via ElevenLabs in the live build</span>";
+
+    var sig = [];
+    sig.push("<span class='signal'>Confidence · <b>" + (trainCtx.confidence ? trainCtx.confidence + "/5" : "not given") + "</b></span>");
+    if (trainCtx.strength) sig.push("<span class='signal'>Strongest · <b>" + escapeHtml(trainCtx.strength) + "</b></span>");
+    if (trainCtx.worry) sig.push("<span class='signal'>Flagged · <b>" + escapeHtml(trainCtx.worry.slice(0, 40)) + "</b></span>");
+    sig.push("<span class='signal'>Recorded · <b>" + trainCtx.transcript.length + " answers" + (trainCtx.qaOk ? " · saved to qa_messages" : "") + "</b></span>");
+    gid("profsignals").innerHTML = sig.join("");
+
+    gid("trainnote").textContent = "Routing computed locally from your real answers. In the live build the full transcript is scored by conversation analysis before routing.";
+  }
+
   gid("begintraining").addEventListener("click", function () {
-    gid("trainnote").textContent = "The customized module player is the next build phase. Routing payload is ready for it: skip [1,2,3] · skim [4,5] · full [6,7,8].";
+    if (trainCtx && trainCtx.slides && trainCtx.slides.length) {
+      buildViewer(trainCtx.exp, trainCtx.slides);
+    } else {
+      gid("trainnote").textContent = "No slides landed for this experience yet — check the wire log from the build.";
+    }
+  });
+  gid("dltranscript").addEventListener("click", function () {
+    if (!trainCtx) return;
+    var blob = new Blob([JSON.stringify({ session: trainCtx.session, experience_id: trainCtx.exp.id, company: trainCtx.company, transcript: trainCtx.transcript }, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "pulse-interview-" + trainCtx.session + ".json";
+    a.click();
+    URL.revokeObjectURL(a.href);
   });
 
   /* ============ SLIDE MANAGER (design surface) ============ */

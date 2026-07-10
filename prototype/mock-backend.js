@@ -132,6 +132,15 @@ const server = http.createServer((req, res) => {
       return;
     }
     if (u.pathname === "/rest/v1/leads" && req.method === "POST") { send(201, []); return; }
+    if (u.pathname === "/rest/v1/qa_messages" && req.method === "POST") { send(201, []); return; }
+    if (u.pathname === "/functions/v1/chat-proxy" && req.method === "POST") {
+      send(200, { content: [{ type: "text", text: JSON.stringify([
+        "What do you already know about how Wichita State approaches applied learning?",
+        "If a prospective student asked you why research matters here, what would you say?",
+        "Which part of the campus story do you think lands hardest with employers?"
+      ]) }] });
+      return;
+    }
     if (u.pathname === "/functions/v1/pulse-experiences" && req.method === "POST") {
       if (!parsed.url) { send(400, { error: "url required" }); return; }
       const id = "exp-fn-" + Math.random().toString(36).slice(2, 8);
@@ -139,7 +148,7 @@ const server = http.createServer((req, res) => {
       send(200, { success: true, experience_id: id });
       return;
     }
-    if (/^\/functions\/v1\/pulse-(scrape|design-dna|brief|slides-generate)$/.test(u.pathname)) {
+    if (/^\/functions\/v1\/pulse-(scrape|design-dna|brief|slides-generate|train-generate)$/.test(u.pathname)) {
       send(200, { success: true, step: u.pathname.split("/").pop() });
       return;
     }
