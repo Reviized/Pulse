@@ -594,7 +594,10 @@
       <button class="ghost-btn" id="voicetoggle" style="padding: 7px 13px; font-size: 11px;">🔊 Voice on</button>
       <button class="end-btn" id="endcall">End call</button>
     </div>
-    <div class="call-tiles">
+    <div class="tavus-frame-wrap" id="tavusframewrap" style="display: none; width: 100%; height: 440px; border-radius: 16px; overflow: hidden; background: #000;">
+      <iframe id="tavusframe" title="Live interview" allow="camera; microphone; fullscreen; display-capture; autoplay" style="width: 100%; height: 100%; border: 0;"></iframe>
+    </div>
+    <div class="call-tiles" id="calltiles">
       <div class="tile tile-mary speaking" id="marytile">
         <div class="mary-fig"><div class="halo">M</div></div>
         <span class="tag">Reviized Interviewer</span>
@@ -607,11 +610,11 @@
         <span class="tag">🎙 You</span>
       </div>
     </div>
-    <div class="convo">
+    <div class="convo" id="scriptedconvo">
       <p class="mary-line"><span class="who">Mary</span><span id="marytext"></span></p>
       <p class="ack-line" id="ackline"></p>
     </div>
-    <div class="answer-zone">
+    <div class="answer-zone" id="scriptedanswerzone">
       <div class="chip-row" id="chiprow"></div>
       <form class="ans-form" id="ansform">
         <button type="button" id="ansmic" aria-label="Answer by voice" style="display: none; background: var(--accent-soft); color: var(--accent); border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent);">🎙</button>
@@ -1690,10 +1693,62 @@
     if (!pendingTrainInterview) return;
     var p = pendingTrainInterview;
     pendingTrainInterview = null;
-    startLiveInterview(p.exp, p.slides, p.qs);
+    startTavusInterview(p.exp, p.slides, p.qs);
   });
 
+  function scrapeSummaryFor(exp) {
+    var parts = [];
+    var cc = exp && exp.content_categories;
+    if (cc && typeof cc === "object") {
+      Object.keys(cc).forEach(function (k) {
+        var v = cc[k];
+        var summary = (v && (v.content_summary || v.headline)) || "";
+        if (summary) parts.push(k + ": " + summary);
+      });
+    }
+    return parts.join("\n").slice(0, 4000);
+  }
+
+  async function startTavusInterview(exp, slides, questions) {
+    var co = (exp && (exp.company_name || exp.name)) || "the company";
+    try {
+      var r = await sb("POST", "/functions/v1/tavus-proxy", {
+        company: co,
+        context: scrapeSummaryFor(exp)
+      }, "/functions/v1/tavus-proxy (create conversation)");
+      if (!r.ok || !r.data || !r.data.success || !r.data.conversation_url) {
+        throw new Error("tavus-proxy did not return a conversation_url");
+      }
+      trainCtx = {
+        exp: exp, slides: slides, tavusConversationId: r.data.conversation_id,
+        transcript: [], learner: "", confidence: 0, worry: "", strength: "",
+        company: co, session: "loc-" + Math.random().toString(36).slice(2, 10)
+      };
+      applyBrandFont(exp);
+      gid("callpill").textContent = "Video interview · " + co;
+      gid("callsession").textContent = "Session: " + trainCtx.session + " · experience " + String(exp.id).slice(0, 8);
+      gid("calltiles").style.display = "none";
+      gid("scriptedconvo").style.display = "none";
+      gid("scriptedanswerzone").style.display = "none";
+      gid("tavusframewrap").style.display = "block";
+      gid("tavusframe").src = r.data.conversation_url;
+      gid("voicetoggle").style.display = "none";
+      show("interview");
+      startTimer();
+    } catch (e) {
+      wire("err", "Tavus unavailable (" + e.message + ") — falling back to the scripted interview.");
+      startLiveInterview(exp, slides, questions);
+    }
+  }
+
   function startLiveInterview(exp, slides, questions) {
+    /* reset in case a prior run in this session left the Tavus iframe visible */
+    gid("tavusframe").src = "about:blank";
+    gid("tavusframewrap").style.display = "none";
+    gid("calltiles").style.display = "";
+    gid("scriptedconvo").style.display = "";
+    gid("scriptedanswerzone").style.display = "";
+    gid("voicetoggle").style.display = "";
     var co = (exp && (exp.company_name || exp.name)) || "the company";
     trainCtx = {
       exp: exp, slides: slides, questions: questions,
@@ -1774,7 +1829,42 @@
     gid("ansinput").value = "";
     liveAnswer(v);
   });
-  gid("endcall").addEventListener("click", endInterview);
+  gid("endcall").addEventListener("click", function () {
+    if (trainCtx && trainCtx.tavusConversationId) endTavusInterview();
+    else endInterview();
+  });
+
+  async function endTavusInterview() {
+    stopTimer();
+    var convId = trainCtx.tavusConversationId;
+    gid("tavusframe").src = "about:blank";
+    try { await sb("POST", "/functions/v1/tavus-proxy", { action: "end", conversation_id: convId }, "/functions/v1/tavus-proxy (end)"); } catch (e) {}
+    try {
+      var r = await sb("POST", "/functions/v1/tavus-proxy", { action: "get", conversation_id: convId }, "/functions/v1/tavus-proxy (get)");
+      applyTavusObjectives(r.ok ? r.data : null);
+    } catch (e) {
+      wire("err", "Could not fetch Tavus objective data (" + e.message + ") — using defaults.");
+    }
+    buildProfile();
+    show("profile");
+  }
+
+  /* Best-effort extraction: Tavus's exact response shape for extracted objectives hasn't been
+     confirmed against a live call yet. Logs the raw payload so the shape can be pinned down, and
+     falls back to sensible defaults rather than breaking the profile screen either way. */
+  function applyTavusObjectives(data) {
+    if (!data) return;
+    wire("ok", "Tavus conversation data: " + JSON.stringify(data).slice(0, 300));
+    var objectives = data.objectives || data.extracted_data || data.perception_analysis || null;
+    var learner = objectives && (objectives.name || objectives.learner_name);
+    var confidence = objectives && (objectives.confidence || objectives.confidence_rating);
+    var worry = objectives && (objectives.worry || objectives.concern);
+    var strength = objectives && (objectives.strength || objectives.strongest_area);
+    if (learner) trainCtx.learner = String(learner).charAt(0).toUpperCase() + String(learner).slice(1);
+    if (confidence) trainCtx.confidence = parseInt(confidence, 10) || trainCtx.confidence;
+    if (worry) trainCtx.worry = String(worry);
+    if (strength) trainCtx.strength = String(strength);
+  }
 
   function qaWrite(role, content) {
     if (!trainCtx || !trainCtx.exp || !trainCtx.exp.id) return;
@@ -1834,7 +1924,11 @@
     sig.push("<span class='signal'>Confidence · <b>" + (trainCtx.confidence ? trainCtx.confidence + "/5" : "not given") + "</b></span>");
     if (trainCtx.strength) sig.push("<span class='signal'>Strongest · <b>" + escapeHtml(trainCtx.strength) + "</b></span>");
     if (trainCtx.worry) sig.push("<span class='signal'>Flagged · <b>" + escapeHtml(trainCtx.worry.slice(0, 40)) + "</b></span>");
-    sig.push("<span class='signal'>Recorded · <b>" + trainCtx.transcript.length + " answers" + (trainCtx.qaOk ? " · saved to qa_messages" : "") + "</b></span>");
+    if (trainCtx.tavusConversationId) {
+      sig.push("<span class='signal'>Recorded · <b>live Tavus conversation</b></span>");
+    } else {
+      sig.push("<span class='signal'>Recorded · <b>" + trainCtx.transcript.length + " answers" + (trainCtx.qaOk ? " · saved to qa_messages" : "") + "</b></span>");
+    }
     gid("profsignals").innerHTML = sig.join("");
 
     gid("trainnote").textContent = "Routing computed locally from your real answers. In the live build the full transcript is scored by conversation analysis before routing.";
