@@ -32,7 +32,7 @@ export async function getSlidesForExperience(
     .from("slides")
     .select("*")
     .eq("experience_id", experienceId)
-    .order("created_at", { ascending: true });
+    .order("position", { ascending: true });
 
   if (error) throw error;
   return data ?? [];

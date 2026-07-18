@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import "@/app/styles/front-door.css";
 import type { Experience, ExperienceMode } from "@/types/database";
+import { buildSlidePlan } from "@/lib/slide-plan";
 
 type Stage = "intro" | "mode" | "url" | "gate";
 
@@ -102,6 +103,8 @@ export function FrontDoor() {
   const [brandAccent, setBrandAccent] = useState<string | null>(null);
   const [brandFont, setBrandFont] = useState<string | null>(null);
   const [brandMatched, setBrandMatched] = useState<boolean | null>(null); // null = not checked yet
+  const [contentReady, setContentReady] = useState<boolean | null>(null); // null = not checked yet
+  const [contentReason, setContentReason] = useState("");
   const [gateName, setGateName] = useState("");
   const [gateEmail, setGateEmail] = useState("");
   const [gateCode, setGateCode] = useState("");
@@ -126,6 +129,20 @@ export function FrontDoor() {
     setStage("url");
   }
 
+  async function markStep(id: string, state: PipelineStepState) {
+    setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, state } : s)));
+  }
+
+  async function postJson(url: string, body: unknown) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then((r) => r.json())
+      .catch(() => ({ success: false }));
+  }
+
   async function runSetup() {
     const raw = urlValue.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
     if (!raw || !mode) return;
@@ -134,41 +151,17 @@ export function FrontDoor() {
     const pipelineSteps = stepsForMode(mode, raw);
     setSteps(pipelineSteps);
 
-    // Real call #1: create the experience row (or a labeled gravel fallback —
-    // see app/api/experiences/route.ts).
-    const createPromise = fetch("/api/experiences", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: fullUrl, mode }),
-    })
-      .then((r) => r.json())
-      .catch(() => ({ success: false }));
+    // Real call: create the experience row (or a labeled gravel fallback —
+    // see app/api/experiences/route.ts). Everything downstream needs a real
+    // persisted experience id, so this gates whether the rest of the
+    // pipeline can be real too.
+    markStep("verify", "live");
+    const [result, design] = await Promise.all([
+      postJson("/api/experiences", { url: fullUrl, mode }),
+      postJson("/api/design-dna", { url: fullUrl }),
+    ]);
+    markStep("verify", "done");
 
-    // Real call #2: extract actual signal from the target site's HTML — real
-    // theme-color/Google Font/declared font-family, no API key needed (see
-    // app/api/design-dna/route.ts). detect-team and generate-slide aren't
-    // wired yet (Phase 5) — the rest of the checklist times out honestly as a
-    // simulated pipeline in the meantime, matching Section 4's gravel-road
-    // philosophy rather than pretending those specific calls are real today.
-    const designPromise = fetch("/api/design-dna", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: fullUrl }),
-    })
-      .then((r) => r.json())
-      .catch(() => ({ success: false }));
-
-    for (let i = 0; i < pipelineSteps.length; i++) {
-      setSteps((prev) =>
-        prev.map((s, idx) => (idx === i ? { ...s, state: "live" } : s))
-      );
-      await new Promise((res) => setTimeout(res, 650 + Math.random() * 500));
-      setSteps((prev) =>
-        prev.map((s, idx) => (idx === i ? { ...s, state: "done" } : s))
-      );
-    }
-
-    const [result, design] = await Promise.all([createPromise, designPromise]);
     if (result?.success) {
       setExperience(result.experience);
       setGravel(Boolean(result.gravel));
@@ -185,6 +178,68 @@ export function FrontDoor() {
     } else {
       setBrandMatched(false);
     }
+
+    const experienceId = result?.experience?.id as string | undefined;
+    const isReal = Boolean(result?.success && !result?.gravel && experienceId);
+
+    if (!isReal) {
+      // No persisted experience id (no SUPABASE_SERVICE_ROLE_KEY, or the
+      // write failed) — nothing downstream can be real either. Walk the
+      // rest of the checklist as an honest timed placeholder rather than
+      // calling routes that would just 404 against a fake id.
+      for (const s of pipelineSteps.slice(1)) {
+        markStep(s.id, "live");
+        await new Promise((res) => setTimeout(res, 500 + Math.random() * 400));
+        markStep(s.id, "done");
+      }
+      setContentReady(false);
+      setContentReason("experience was not saved, see the gravel road label above");
+      setRunning(false);
+      setTimeout(() => setStage("gate"), 500);
+      return;
+    }
+
+    markStep("team", "live");
+    const team = await postJson("/api/detect-team", { experienceId, url: fullUrl });
+    markStep("team", "done");
+    const profiles = team?.success && !team?.gravel ? team.profiles ?? [] : [];
+    const narrator = team?.success && !team?.gravel ? team.narrator ?? null : null;
+
+    const contentStepId = mode === "train" ? "curr" : "content";
+    markStep(contentStepId, "live");
+    let contentOk = false;
+    let reason = "";
+    if (mode === "train") {
+      const curr = await postJson("/api/generate-curriculum", { experienceId });
+      contentOk = Boolean(curr?.success && !curr?.gravel && (curr?.modules?.length ?? 0) > 0);
+      reason = curr?.reason ?? "";
+    } else {
+      const plan = buildSlidePlan(mode, profiles, narrator);
+      let wrote = 0;
+      for (const slot of plan) {
+        const slideResult = await postJson("/api/generate-slide", {
+          experienceId,
+          position: slot.position,
+          layout: slot.layout,
+          special: slot.special,
+          textPos: slot.textPos,
+          speakerProfileId: slot.speakerProfileId,
+          brief: slot.brief,
+          label: slot.label,
+        });
+        if (slideResult?.success) wrote++;
+        if (slideResult?.reason) reason = slideResult.reason;
+      }
+      contentOk = wrote > 0;
+    }
+    markStep(contentStepId, "done");
+
+    markStep("cohesion", "live");
+    await postJson("/api/cohesion", { experienceId });
+    markStep("cohesion", "done");
+
+    setContentReady(contentOk);
+    setContentReason(contentOk ? "" : reason || "content generation did not complete");
 
     setRunning(false);
     setTimeout(() => setStage("gate"), 500);
@@ -382,6 +437,12 @@ export function FrontDoor() {
             <div className="gate-hint">
               Pilot access code: <code>{experience?.access_code ?? "REV123"}</code>
             </div>
+            {contentReady === false && (
+              <div className="gate-hint" style={{ color: "#d97a7a" }}>
+                {mode === "train" ? "Curriculum" : "Deck"} not generated yet
+                {contentReason ? `: ${contentReason}` : ""}
+              </div>
+            )}
             <button className="fd-skip" style={{ marginTop: 18 }} onClick={() => setStage("mode")}>
               ← Back to the front door
             </button>
