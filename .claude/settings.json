@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git log:*)",
+      "Bash(git checkout -b*)",
+      "Bash(supabase:*)",
+      "Bash(curl -s http*)",
+      "Edit(src/**)",
+      "Edit(app/**)",
+      "Edit(components/**)",
+      "Edit(lib/**)",
+      "Edit(supabase/migrations/**)",
+      "Edit(supabase/functions/**)",
+      "Edit(*.md)",
+      "Edit(*.json)",
+      "Read(**)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Edit(.env*)",
+      "Edit(package.json)",
+      "Edit(supabase/config.toml)",
+      "Edit(.claude/settings.json)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -f*)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | bash)",
+      "Bash(cat .env*)",
+      "Bash(printenv*)"
+    ]
+  }
+}

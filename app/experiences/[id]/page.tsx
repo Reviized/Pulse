@@ -21,10 +21,10 @@ export default async function ExperienceDetailPage({
       </Link>
 
       <h1 className="mt-2 text-2xl font-semibold">
-        {experience.name ?? experience.company_name ?? experience.id}
+        {experience.company_name ?? experience.source_url ?? experience.id}
       </h1>
       <p className="mb-6 text-sm text-neutral-500">
-        {experience.mode} · {experience.status} · {slides.length} slides
+        {experience.mode} · {slides.length} slides
       </p>
 
       {slides.length > 0 && (
@@ -42,7 +42,7 @@ export default async function ExperienceDetailPage({
             <span className="mr-2 text-neutral-400">{i + 1}.</span>
             <span className="font-medium">{slide.headline ?? "(untitled slide)"}</span>
             <span className="ml-2 text-xs uppercase text-neutral-500">
-              {slide.layout_type}
+              {slide.layout}
             </span>
           </li>
         ))}

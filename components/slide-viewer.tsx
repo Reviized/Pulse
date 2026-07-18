@@ -59,19 +59,22 @@ export function SlideViewer({
   );
 }
 
+function SlideMedia({ slide, className }: { slide: Slide; className: string }) {
+  if (!slide.media_url) return <span className="text-xs text-neutral-400">No media</span>;
+  if (slide.media_kind === "video") {
+    return <video src={slide.media_url} className={className} autoPlay muted loop controls />;
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={slide.media_url} alt={slide.headline ?? ""} className={className} />;
+}
+
 function SlideContent({ slide }: { slide: Slide }) {
-  switch (slide.layout_type) {
+  switch (slide.layout) {
     case "media_full":
       return (
         <div className="relative flex h-full min-h-[60vh] items-end bg-black">
-          {slide.video_url && (
-            <video
-              src={slide.video_url}
-              className="absolute inset-0 h-full w-full object-cover"
-              autoPlay
-              muted
-              loop
-            />
+          {slide.media_url && (
+            <SlideMedia slide={slide} className="absolute inset-0 h-full w-full object-cover" />
           )}
           <div className="relative z-10 p-8 text-white">
             {slide.eyebrow && (
@@ -91,12 +94,12 @@ function SlideContent({ slide }: { slide: Slide }) {
       return (
         <div
           className={`grid min-h-[60vh] gap-6 p-8 ${
-            slide.layout_type === "split" ? "grid-cols-2" : "grid-cols-4"
+            slide.layout === "split" ? "grid-cols-2" : "grid-cols-4"
           }`}
         >
           <div
             className={
-              slide.layout_type === "split" ? "col-span-1" : "col-span-3"
+              slide.layout === "split" ? "col-span-1" : "col-span-3"
             }
           >
             {slide.eyebrow && (
@@ -111,11 +114,7 @@ function SlideContent({ slide }: { slide: Slide }) {
             {slide.sig && <p className="mt-4 text-sm italic">{slide.sig}</p>}
           </div>
           <div className="col-span-1 flex items-center justify-center bg-neutral-100 dark:bg-neutral-900">
-            {slide.video_url ? (
-              <video src={slide.video_url} className="h-full w-full object-cover" controls />
-            ) : (
-              <span className="text-xs text-neutral-400">No media</span>
-            )}
+            <SlideMedia slide={slide} className="h-full w-full object-cover" />
           </div>
         </div>
       );
@@ -141,13 +140,20 @@ function SlideContent({ slide }: { slide: Slide }) {
       );
 
     case "waveform":
+      /* narration audio isn't a stored column (Section 6, /api/voiceover renders it
+         on demand, cached in Storage by hash(text+voice)) — gravel until that route
+         is wired; render the script text so the slide isn't empty in the meantime */
       return (
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-8">
           {slide.headline && (
             <h2 className="text-2xl font-semibold">{slide.headline}</h2>
           )}
           {slide.body && <p className="max-w-lg text-center text-neutral-600 dark:text-neutral-400">{slide.body}</p>}
-          {slide.audio_url && <audio src={slide.audio_url} controls className="mt-4" />}
+          {slide.script && (
+            <p className="max-w-lg text-center text-xs uppercase tracking-wide text-neutral-400">
+              Narration pending · /api/voiceover not yet wired
+            </p>
+          )}
         </div>
       );
 

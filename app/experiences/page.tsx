@@ -29,10 +29,10 @@ export default async function ExperiencesPage() {
                 className="flex items-center justify-between hover:underline"
               >
                 <span>
-                  {experience.name ?? experience.company_name ?? experience.id}
+                  {experience.company_name ?? experience.source_url ?? experience.id}
                 </span>
                 <span className="text-xs uppercase text-neutral-500">
-                  {experience.status}
+                  {experience.mode}
                 </span>
               </Link>
             </li>
