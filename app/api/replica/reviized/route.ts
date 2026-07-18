@@ -1,40 +1,52 @@
 import { NextResponse } from "next/server";
+import { createJob, renderJob, ReviizedUnavailable, ReviizedApiError } from "@/lib/reviized";
 
 /**
- * Section 7's real contract: POST /v1/token/ -> POST /v1/jobs/create/ ->
- * PATCH /v1/jobs/{id}/render/, server-side only, credentials never touching
- * the client. REVIIZED_USERNAME/REVIIZED_PASSWORD are not configured in
- * this environment (confirmed absent from .env.local), so per the gravel
- * road philosophy (Section 4) this reports gravel immediately and never
- * attempts a real call — Replica Studio's "Queue REViiZED job" button still
- * writes a real `replica_jobs` row with status HOLD off this honest result.
+ * Section 7's real contract: POST /v1/jobs/create/ -> PATCH
+ * /v1/jobs/{id}/render/, server-side only via lib/reviized.ts (the JWT
+ * exchange never touches the client). Requires project/video/voice as
+ * REViiZED's own numeric catalog ids (Section 7's lookups, see
+ * /api/replica/reviized/lookups) plus a script and a display name.
  *
- * When REVIIZED_USERNAME/PASSWORD are supplied, pave this: exchange for a
- * JWT (cache in server memory, refresh before the 30-minute expiry), then
- * POST /v1/jobs/create/ with {project, name, script, video, voice} and
- * PATCH /v1/jobs/{id}/render/ with {force}. Respect the 3/minute render cap
- * and the 30/minute overall cap.
+ * REVIIZED_USERNAME/PASSWORD absent -> honest gravel, no call attempted.
+ * A validation gap in the payload itself (missing project/video/voice)
+ * also gravels rather than sending a call REViiZED would just reject.
  */
 export async function POST(req: Request) {
-  const username = process.env.REVIIZED_USERNAME;
-  const password = process.env.REVIIZED_PASSWORD;
+  const body = await req.json().catch(() => null);
+  const project = typeof body?.project === "number" ? body.project : null;
+  const video = typeof body?.video === "number" ? body.video : null;
+  const voice = typeof body?.voice === "number" ? body.voice : null;
+  const name = typeof body?.name === "string" ? body.name : "";
+  const script = typeof body?.script === "string" ? body.script : "";
 
-  if (!username || !password) {
+  if (!project || !video || !voice || !name || !script.trim()) {
     return NextResponse.json({
       success: true,
       gravel: true,
-      reason: "REVIIZED_USERNAME/PASSWORD not configured",
+      reason: "project, video, voice, name, and a non-empty script are all required before REViiZED can queue this",
     });
   }
 
-  // Credentials are present but the real jobs/create -> jobs/render sequence
-  // has not been built against a live account yet in this pass — still an
-  // honest gravel result, not a fabricated success, per Section 4.
-  const body = await req.json().catch(() => null);
-  return NextResponse.json({
-    success: true,
-    gravel: true,
-    reason: "REViiZED credentials are configured but the live job pipeline is not wired yet (build order item 9)",
-    payload: body ?? null,
-  });
+  try {
+    const job = await createJob({ project, name, script, video, voice, notes: body?.notes });
+    await renderJob(job.id);
+
+    // The reviized_job_id lives on replica_jobs (Section 5's schema has no
+    // such column on profiles) — the caller (queueReviizedJob server
+    // action) writes it there via insertReplicaJob right after this call.
+    return NextResponse.json({ success: true, gravel: false, reviizedJobId: job.id, status: job.status ?? "REQUESTED" });
+  } catch (err) {
+    if (err instanceof ReviizedUnavailable) {
+      return NextResponse.json({ success: true, gravel: true, reason: err.message });
+    }
+    if (err instanceof ReviizedApiError) {
+      return NextResponse.json({ success: true, gravel: true, reason: err.message, status: err.status });
+    }
+    return NextResponse.json({
+      success: true,
+      gravel: true,
+      reason: err instanceof Error ? err.message : "REViiZED job creation failed",
+    });
+  }
 }

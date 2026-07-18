@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Profile, ReplicaJob, ReplicaJobStatus } from "@/types/database";
 import { queueReviizedJob, updateReplicaFields, type ReplicaFormFields } from "../_actions/replica";
 import { Pill } from "../_components/Pill";
@@ -11,6 +11,33 @@ function statusPillKind(status: ReplicaJobStatus): "paved" | "gravel" | "bad" {
   return "gravel";
 }
 
+type Lookups = { projects: { id: number; name: string }[]; videos: { id: number; name: string }[]; voices: { id: number; name: string }[] };
+
+/** Fetched once per Replica Studio page load, shared across every profile card on it. */
+function useReviizedLookups() {
+  const [lookups, setLookups] = useState<Lookups | null>(null);
+  const [gravel, setGravel] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/replica/reviized/lookups")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setGravel(Boolean(data.gravel));
+        if (!data.gravel) setLookups({ projects: data.projects, videos: data.videos, voices: data.voices });
+      })
+      .catch(() => {
+        if (!cancelled) setGravel(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { lookups, gravel };
+}
+
 export function ReplicaEditorList({
   profiles,
   jobsByProfile,
@@ -18,6 +45,8 @@ export function ReplicaEditorList({
   profiles: Profile[];
   jobsByProfile: Record<string, ReplicaJob[]>;
 }) {
+  const { lookups, gravel: lookupsGravel } = useReviizedLookups();
+
   if (profiles.length === 0) {
     return (
       <div className="pa-empty">
@@ -30,13 +59,29 @@ export function ReplicaEditorList({
   return (
     <div>
       {profiles.map((p) => (
-        <ReplicaCard key={p.id} profile={p} jobs={jobsByProfile[p.id] ?? []} />
+        <ReplicaCard
+          key={p.id}
+          profile={p}
+          jobs={jobsByProfile[p.id] ?? []}
+          lookups={lookups}
+          lookupsGravel={lookupsGravel}
+        />
       ))}
     </div>
   );
 }
 
-function ReplicaCard({ profile, jobs }: { profile: Profile; jobs: ReplicaJob[] }) {
+function ReplicaCard({
+  profile,
+  jobs,
+  lookups,
+  lookupsGravel,
+}: {
+  profile: Profile;
+  jobs: ReplicaJob[];
+  lookups: Lookups | null;
+  lookupsGravel: boolean;
+}) {
   const [form, setForm] = useState<ReplicaFormFields>({
     replica_script: profile.replica_script ?? "",
     reviized_project_id: profile.reviized_project_id?.toString() ?? "",
@@ -96,6 +141,32 @@ function ReplicaCard({ profile, jobs }: { profile: Profile; jobs: ReplicaJob[] }
     }
   }
 
+  // Poll non-terminal jobs (Section 7: "at most once per minute", enforced
+  // server-side against replica_jobs.updated_at — this interval just decides
+  // when the client asks, the route decides whether it actually re-checks
+  // REViiZED or hands back the cached row).
+  const jobHistoryRef = useRef(jobHistory);
+  jobHistoryRef.current = jobHistory;
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const pending = jobHistoryRef.current.filter((j) => j.status !== "COMPLETE" && j.status !== "ERROR");
+      for (const j of pending) {
+        try {
+          const res = await fetch(`/api/replica/reviized/${j.id}/status`);
+          const data = await res.json();
+          if (data.job) {
+            setJobHistory((prev) => prev.map((existing) => (existing.id === j.id ? data.job : existing)));
+          }
+        } catch {
+          // best-effort polling, a missed tick just retries next interval
+        }
+      }
+    }, 65_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const useSelectors = !lookupsGravel && lookups;
+
   return (
     <div className="pa-item-card">
       <div className="pa-item-body">
@@ -116,40 +187,92 @@ function ReplicaCard({ profile, jobs }: { profile: Profile; jobs: ReplicaJob[] }
           />
         </div>
 
-        <p className="pa-hint gravel-note">
-          Gravel road: REViiZED lookups not wired, no account credentials configured. These are
-          free-text ID fields, the pre-lookup stand-in (Section 7) — once REVIIZED_USERNAME /
-          REVIIZED_PASSWORD are set, this becomes three lookup-backed selectors populated from
-          GET /v1/projects, /v1/videos, and /v1/voices.
-        </p>
+        {useSelectors ? (
+          <p className="pa-hint">
+            Paved: REViiZED lookups are live. Selectors below are populated from GET /v1/projects,
+            /v1/videos, and /v1/voices (cached 10 minutes).
+          </p>
+        ) : (
+          <p className="pa-hint gravel-note">
+            Gravel road: REViiZED lookups not wired, no account credentials configured. These are
+            free-text ID fields, the pre-lookup stand-in (Section 7) — once REVIIZED_USERNAME /
+            REVIIZED_PASSWORD are set, this becomes three lookup-backed selectors populated from
+            GET /v1/projects, /v1/videos, and /v1/voices.
+          </p>
+        )}
 
         <div className="pa-grid cols-3">
           <div className="pa-field">
-            <label>REViiZED project id</label>
-            <input
-              className="pa-input"
-              value={form.reviized_project_id}
-              onChange={(e) => setForm((f) => ({ ...f, reviized_project_id: e.target.value }))}
-              placeholder="int"
-            />
+            <label>REViiZED project</label>
+            {useSelectors ? (
+              <select
+                className="pa-input"
+                value={form.reviized_project_id}
+                onChange={(e) => setForm((f) => ({ ...f, reviized_project_id: e.target.value }))}
+              >
+                <option value="">Select a project…</option>
+                {lookups!.projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="pa-input"
+                value={form.reviized_project_id}
+                onChange={(e) => setForm((f) => ({ ...f, reviized_project_id: e.target.value }))}
+                placeholder="int"
+              />
+            )}
           </div>
           <div className="pa-field">
-            <label>REViiZED video id</label>
-            <input
-              className="pa-input"
-              value={form.reviized_video_id}
-              onChange={(e) => setForm((f) => ({ ...f, reviized_video_id: e.target.value }))}
-              placeholder="int"
-            />
+            <label>REViiZED video</label>
+            {useSelectors ? (
+              <select
+                className="pa-input"
+                value={form.reviized_video_id}
+                onChange={(e) => setForm((f) => ({ ...f, reviized_video_id: e.target.value }))}
+              >
+                <option value="">Select a source video…</option>
+                {lookups!.videos.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="pa-input"
+                value={form.reviized_video_id}
+                onChange={(e) => setForm((f) => ({ ...f, reviized_video_id: e.target.value }))}
+                placeholder="int"
+              />
+            )}
           </div>
           <div className="pa-field">
-            <label>REViiZED voice id</label>
-            <input
-              className="pa-input"
-              value={form.reviized_voice_id}
-              onChange={(e) => setForm((f) => ({ ...f, reviized_voice_id: e.target.value }))}
-              placeholder="int"
-            />
+            <label>REViiZED voice</label>
+            {useSelectors ? (
+              <select
+                className="pa-input"
+                value={form.reviized_voice_id}
+                onChange={(e) => setForm((f) => ({ ...f, reviized_voice_id: e.target.value }))}
+              >
+                <option value="">Select a voice…</option>
+                {lookups!.voices.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="pa-input"
+                value={form.reviized_voice_id}
+                onChange={(e) => setForm((f) => ({ ...f, reviized_voice_id: e.target.value }))}
+                placeholder="int"
+              />
+            )}
           </div>
         </div>
 

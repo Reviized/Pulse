@@ -68,17 +68,24 @@ export async function queueReviizedJob(
 
   let gravel = true;
   let reason = "REVIIZED_USERNAME/PASSWORD not configured";
+  let reviizedJobId: number | null = null;
   try {
     const res = await reviizedRoute(
       new Request("http://internal/api/replica/reviized", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, profileId }),
       })
     );
-    const json = (await res.json()) as { success: boolean; gravel?: boolean; reason?: string };
+    const json = (await res.json()) as {
+      success: boolean;
+      gravel?: boolean;
+      reason?: string;
+      reviizedJobId?: number;
+    };
     gravel = Boolean(json.gravel);
     reason = json.reason ?? reason;
+    reviizedJobId = json.reviizedJobId ?? null;
   } catch (err) {
     reason = err instanceof Error ? err.message : "the reviized route threw an unknown error";
   }
@@ -86,6 +93,7 @@ export async function queueReviizedJob(
   const status: ReplicaJobStatus = gravel ? "HOLD" : "REQUESTED";
   const job = await insertReplicaJob({
     profile_id: profileId,
+    reviized_job_id: reviizedJobId,
     payload: { ...payload, notes: reason },
     status,
   });

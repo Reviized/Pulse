@@ -1,25 +1,37 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+type Bucket = "headshots" | "slide-media" | "replicas" | "generated";
+
+function extFor(contentType: string): string {
+  if (contentType.includes("png")) return "png";
+  if (contentType.includes("webp")) return "webp";
+  if (contentType.includes("mp4")) return "mp4";
+  if (contentType.includes("quicktime") || contentType.includes("mov")) return "mov";
+  if (contentType.includes("webm")) return "webm";
+  return contentType.startsWith("video/") ? "mp4" : "jpg";
+}
+
 /**
- * Re-hosts a scraped image to Supabase Storage (Section 5: "hotlinked
- * headshots die on CDN blocks"). Returns the public Storage URL on success,
- * or the original source URL as an honest fallback when the admin client
- * (no SUPABASE_SERVICE_ROLE_KEY) or the fetch itself isn't available, so a
- * pending re-host never blocks the caller.
+ * Generic re-host: downloads sourceUrl and uploads it to Supabase Storage,
+ * used for both scraped headshots (Section 5) and rendered replica video
+ * output (Section 7: "download and re-host the output to the replicas
+ * Storage bucket immediately, never link directly to a REViiZED-hosted URL
+ * long-term"). Returns the original source URL as an honest fallback when
+ * the admin client or the fetch itself isn't available.
  */
-export async function rehostImage(
+export async function rehostFile(
   sourceUrl: string,
-  bucket: "headshots" | "slide-media" | "replicas" | "generated",
+  bucket: Bucket,
   pathHint: string
 ): Promise<{ url: string; rehosted: boolean }> {
   const admin = createAdminClient();
   if (!admin) return { url: sourceUrl, rehosted: false };
 
   try {
-    const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(10000) });
+    const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(30000) });
     if (!res.ok) return { url: sourceUrl, rehosted: false };
     const contentType = res.headers.get("content-type") ?? "image/jpeg";
-    const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+    const ext = extFor(contentType);
     const buffer = await res.arrayBuffer();
     const path = `${pathHint}-${Date.now()}.${ext}`;
 
@@ -34,4 +46,13 @@ export async function rehostImage(
   } catch {
     return { url: sourceUrl, rehosted: false };
   }
+}
+
+/** Thin alias kept for existing callers (headshot re-hosting reads more clearly this way). */
+export async function rehostImage(
+  sourceUrl: string,
+  bucket: Bucket,
+  pathHint: string
+): Promise<{ url: string; rehosted: boolean }> {
+  return rehostFile(sourceUrl, bucket, pathHint);
 }
