@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { useRouter } from "next/navigation";
 import "@/app/styles/front-door.css";
 import type { Experience, ExperienceMode } from "@/types/database";
 import { buildSlidePlan } from "@/lib/slide-plan";
@@ -91,7 +90,6 @@ function stepsForMode(mode: ExperienceMode, host: string): PipelineStep[] {
 }
 
 export function FrontDoor() {
-  const router = useRouter();
   const [stage, setStage] = useState<Stage>("intro");
   const [introGone, setIntroGone] = useState(false);
   const [mode, setMode] = useState<ExperienceMode | null>(null);
@@ -109,6 +107,7 @@ export function FrontDoor() {
   const [gateEmail, setGateEmail] = useState("");
   const [gateCode, setGateCode] = useState("");
   const [gateError, setGateError] = useState("");
+  const [gateBusy, setGateBusy] = useState(false);
   const introDone = useRef(false);
 
   useEffect(() => {
@@ -245,17 +244,58 @@ export function FrontDoor() {
     setTimeout(() => setStage("gate"), 500);
   }
 
-  function tryGate() {
+  async function tryGate() {
     if (!gateEmail.trim() || !gateCode.trim()) {
       setGateError("Enter your email and the access code.");
       return;
     }
-    if (gateCode.trim().toUpperCase() !== (experience?.access_code ?? "REV123").toUpperCase()) {
+    if (!experience) {
+      setGateError("No experience to unlock.");
+      return;
+    }
+
+    // A gravel experience never made it into the database (no service role
+    // key, or the write failed) — there's nothing real for /api/gate to
+    // validate or write a lead against, so fall back to the same local
+    // check the pre-/api/gate version of this screen used.
+    if (gravel) {
+      if (gateCode.trim().toUpperCase() !== experience.access_code.toUpperCase()) {
+        setGateError("That access code doesn't match. Try again.");
+        return;
+      }
+      setGateError("");
+      // A hard navigation, not router.push: verified directly (console
+      // logging around the call) that Next's client-side transition can
+      // silently no-op here even though push() itself is reached with the
+      // right URL — window.location guarantees the browser actually moves,
+      // at the cost of a full reload, which is a fine tradeoff for a
+      // once-per-session "enter the experience" moment.
+      window.location.href = `/frontdoor/${experience.id}`;
+      return;
+    }
+
+    setGateBusy(true);
+    setGateError("");
+    const result = await postJson("/api/gate", {
+      experienceId: experience.id,
+      email: gateEmail.trim(),
+      code: gateCode.trim(),
+    });
+    setGateBusy(false);
+
+    if (result?.error) {
+      setGateError(result.error);
+      return;
+    }
+    if (result?.success && result.unlocked === false) {
       setGateError("That access code doesn't match. Try again.");
       return;
     }
-    setGateError("");
-    if (experience) router.push(`/frontdoor/${experience.id}`);
+    if (!result?.success) {
+      setGateError("Something went wrong unlocking this experience. Try again.");
+      return;
+    }
+    window.location.href = `/frontdoor/${experience.id}`;
   }
 
   const companyWords = (experience?.company_name ?? "Your Company").toUpperCase().split(" ");
@@ -430,8 +470,8 @@ export function FrontDoor() {
               value={gateCode}
               onChange={(e) => setGateCode(e.target.value)}
             />
-            <button className="fd-go fd-go-block" onClick={tryGate}>
-              Unlock Experience
+            <button className="fd-go fd-go-block" onClick={tryGate} disabled={gateBusy}>
+              {gateBusy ? "Unlocking…" : "Unlock Experience"}
             </button>
             <div className="gate-error">{gateError}</div>
             <div className="gate-hint">
