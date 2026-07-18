@@ -1,0 +1,309 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import "@/app/styles/front-door.css";
+import type { Experience, ExperienceMode } from "@/types/database";
+
+type Stage = "intro" | "mode" | "url" | "gate";
+
+const MODE_COPY: Record<
+  ExperienceMode,
+  { h: string; d: string; s: string }
+> = {
+  inform: {
+    h: "Who are we introducing?",
+    d: "Walk them through who you are and what you do.",
+    s: "Drop in the company's website. Pulse scrapes it live and builds the introduction in their brand and tone, grounded in what the site actually says.",
+  },
+  train: {
+    h: "Whose training is this?",
+    d: "Teach them a process and verify they got it.",
+    s: "Drop in the company's website. Pulse scrapes it live, builds the training deck in their brand and tone, and the narrator opens with a short one on one built from what the site actually says.",
+  },
+  sell: {
+    h: "Who are we selling for?",
+    d: "Move them toward a decision.",
+    s: "Drop in the company's website. Pulse scrapes it live and builds the pitch in their brand and tone, grounded in what the site actually says.",
+  },
+};
+
+type PipelineStepState = "pending" | "live" | "done";
+type PipelineStep = { id: string; label: string; state: PipelineStepState };
+
+function stepsForMode(mode: ExperienceMode, host: string): PipelineStep[] {
+  const base: PipelineStep[] = [
+    { id: "verify", label: `Reading ${host} · brand and identity`, state: "pending" },
+    { id: "team", label: "Detecting the team", state: "pending" },
+  ];
+  if (mode === "train") {
+    base.push({ id: "curr", label: "Designing the curriculum", state: "pending" });
+  } else if (mode === "sell") {
+    base.push({ id: "content", label: "Writing the pitch", state: "pending" });
+  } else {
+    base.push({ id: "content", label: "Writing the introduction", state: "pending" });
+  }
+  base.push({ id: "cohesion", label: "The Intelligence Loop · cohesion check", state: "pending" });
+  return base;
+}
+
+export function FrontDoor() {
+  const router = useRouter();
+  const [stage, setStage] = useState<Stage>("intro");
+  const [introGone, setIntroGone] = useState(false);
+  const [mode, setMode] = useState<ExperienceMode | null>(null);
+  const [urlValue, setUrlValue] = useState("");
+  const [running, setRunning] = useState(false);
+  const [steps, setSteps] = useState<PipelineStep[]>([]);
+  const [experience, setExperience] = useState<Experience | null>(null);
+  const [gravel, setGravel] = useState(false);
+  const [gateName, setGateName] = useState("");
+  const [gateEmail, setGateEmail] = useState("");
+  const [gateCode, setGateCode] = useState("");
+  const [gateError, setGateError] = useState("");
+  const introDone = useRef(false);
+
+  useEffect(() => {
+    const t = setTimeout(endIntro, 3300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function endIntro() {
+    if (introDone.current) return;
+    introDone.current = true;
+    setIntroGone(true);
+    setTimeout(() => setStage("mode"), 700);
+  }
+
+  function chooseMode(m: ExperienceMode) {
+    setMode(m);
+    setStage("url");
+  }
+
+  async function runSetup() {
+    const raw = urlValue.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    if (!raw || !mode) return;
+    const fullUrl = "https://" + raw;
+    setRunning(true);
+    const pipelineSteps = stepsForMode(mode, raw);
+    setSteps(pipelineSteps);
+
+    // Real call: create the experience row (or a labeled gravel fallback — see
+    // app/api/experiences/route.ts). Runs alongside the step animation below
+    // rather than gating it, since design-dna/detect-team/generate-slide
+    // aren't wired yet (Phase 5) — the checklist times out honestly as a
+    // simulated pipeline in the meantime, matching Section 4's gravel-road
+    // philosophy rather than pretending those calls are real today.
+    const createPromise = fetch("/api/experiences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: fullUrl, mode }),
+    })
+      .then((r) => r.json())
+      .catch(() => ({ success: false }));
+
+    for (let i = 0; i < pipelineSteps.length; i++) {
+      setSteps((prev) =>
+        prev.map((s, idx) => (idx === i ? { ...s, state: "live" } : s))
+      );
+      await new Promise((res) => setTimeout(res, 650 + Math.random() * 500));
+      setSteps((prev) =>
+        prev.map((s, idx) => (idx === i ? { ...s, state: "done" } : s))
+      );
+    }
+
+    const result = await createPromise;
+    if (result?.success) {
+      setExperience(result.experience);
+      setGravel(Boolean(result.gravel));
+    }
+
+    setRunning(false);
+    setTimeout(() => setStage("gate"), 500);
+  }
+
+  function tryGate() {
+    if (!gateEmail.trim() || !gateCode.trim()) {
+      setGateError("Enter your email and the access code.");
+      return;
+    }
+    if (gateCode.trim().toUpperCase() !== (experience?.access_code ?? "REV123").toUpperCase()) {
+      setGateError("That access code doesn't match. Try again.");
+      return;
+    }
+    setGateError("");
+    if (experience) router.push(`/frontdoor/${experience.id}`);
+  }
+
+  const companyWords = (experience?.company_name ?? "Your Company").toUpperCase().split(" ");
+  const goldWordIdx = companyWords.length >= 3 ? 1 : 0;
+
+  return (
+    <div className="pulse-fd" data-mode={mode ?? "inform"}>
+      {/* ═══ INTRO ═══ */}
+      {stage === "intro" && (
+        <div className={`pi-root${introGone ? " gone" : ""}`} onClick={endIntro}>
+          <div className="pi-stage">
+            <div style={{ position: "relative" }}>
+              <svg className="pi-ekg" viewBox="0 0 760 140" preserveAspectRatio="xMidYMid meet">
+                <path d="M0,70 L210,70 L245,70 L262,40 L280,104 L298,14 L318,122 L338,52 L354,70 L400,70 L418,58 L436,82 L452,70 L560,70 L760,70" />
+              </svg>
+              <span className="pi-ring r1" />
+              <span className="pi-ring r2" />
+              <span className="pi-ring r3" />
+            </div>
+            <div className="pi-word">
+              {"PULSE".split("").map((c, i) => (
+                <span key={i} style={{ animationDelay: `${1.05 + i * 0.09}s` }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+            <div className="pi-sub">
+              Inform · Train · Sell · powered by <b>Pulse 3.0</b>
+            </div>
+            <div className="pi-tag">One URL becomes an experience. Watch.</div>
+            <div className="pi-skip">Click to skip</div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODE PICK ═══ */}
+      {stage === "mode" && (
+        <div className="fd-setup">
+          <div className="fd-card modepick">
+            <div className="fd-mark" style={{ textAlign: "center" }}>
+              PULSE <b>3.0</b>
+            </div>
+            <div className="fd-sub">A REViiZED Product</div>
+            <h1 className="sp-h1">What are you here to do?</h1>
+            <p className="lede">Choose a mode. We will tailor the whole experience to it.</p>
+            <div className="mode-cards">
+              {(["inform", "train", "sell"] as ExperienceMode[]).map((m) => (
+                <button key={m} className="mcard" data-m={m} onClick={() => chooseMode(m)}>
+                  <span
+                    className={`orb ${m === "inform" ? "blue" : m === "train" ? "orange" : "green"}`}
+                  />
+                  <b>{m[0].toUpperCase() + m.slice(1)}</b>
+                  <span className="mdesc">{MODE_COPY[m].d}</span>
+                  <span className="menter">Enter →</span>
+                </button>
+              ))}
+            </div>
+            <button className="fd-admin-pill" disabled title="Admin panel — later phase">
+              ⚙ Admin · team only
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ URL ENTRY + PIPELINE ═══ */}
+      {stage === "url" && mode && (
+        <div className="fd-setup">
+          <div className="fd-card">
+            <div className="fd-mark">
+              PULSE <b>3.0</b>
+            </div>
+            <div className="fd-sub">
+              A REViiZED Product · {mode[0].toUpperCase() + mode.slice(1)} Mode
+            </div>
+            <h1>{MODE_COPY[mode].h}</h1>
+            <p className="lede">{MODE_COPY[mode].s}</p>
+            <div className="fd-row">
+              <span className="proto">https://</span>
+              <input
+                className="fd-url"
+                type="text"
+                placeholder="anycompany.com"
+                spellCheck={false}
+                value={urlValue}
+                disabled={running}
+                onChange={(e) => setUrlValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") runSetup();
+                }}
+              />
+              <button className="fd-go" onClick={runSetup} disabled={running || !urlValue.trim()}>
+                {running ? "…" : "Create Pulse"}
+              </button>
+            </div>
+            {steps.length > 0 && (
+              <div className="fd-prog">
+                {steps.map((s) => (
+                  <div key={s.id} className={`fd-prog-item ${s.state}`}>
+                    <span className="ic">{s.state === "done" ? "✓" : s.state === "live" ? "◉" : "○"}</span>
+                    {s.label}
+                  </div>
+                ))}
+              </div>
+            )}
+            {!running && (
+              <button className="fd-skip" onClick={() => setStage("mode")}>
+                ← Change mode
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ GATE ═══ */}
+      {stage === "gate" && (
+        <div className="gate-root show">
+          <div className="gate-card">
+            <div className="gate-mark">
+              {companyWords.map((w, i) => (
+                <span key={i}>
+                  {i === goldWordIdx ? <span style={{ color: "var(--gold)" }}>{w}</span> : w}
+                  {i < companyWords.length - 1 ? " " : ""}
+                </span>
+              ))}
+            </div>
+            <div className="gate-sub">
+              A Pulse Experience{gravel ? " · gravel road (unsaved demo)" : ""}
+            </div>
+            <h1>
+              Before we begin, let&apos;s get <em>introduced.</em>
+            </h1>
+            <p>Enter your email and access code to unlock this experience.</p>
+            <input
+              className="gate-field"
+              type="text"
+              placeholder="Your name"
+              autoComplete="name"
+              value={gateName}
+              onChange={(e) => setGateName(e.target.value)}
+            />
+            <input
+              className="gate-field"
+              type="email"
+              placeholder="Work email"
+              autoComplete="email"
+              value={gateEmail}
+              onChange={(e) => setGateEmail(e.target.value)}
+            />
+            <input
+              className="gate-field gate-code"
+              type="text"
+              maxLength={6}
+              placeholder="ACCESS CODE"
+              autoComplete="off"
+              value={gateCode}
+              onChange={(e) => setGateCode(e.target.value)}
+            />
+            <button className="cta" style={{ width: "100%", marginTop: 8 }} onClick={tryGate}>
+              Unlock Experience
+            </button>
+            <div className="gate-error">{gateError}</div>
+            <div className="gate-hint">
+              Pilot access code: <code>{experience?.access_code ?? "REV123"}</code>
+            </div>
+            <button className="fd-skip" style={{ marginTop: 18 }} onClick={() => setStage("mode")}>
+              ← Back to the front door
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
