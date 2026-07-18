@@ -5,6 +5,7 @@ import { forcedToolCall, AnthropicUnavailable, enforceCopyRules } from "@/lib/an
 import { replaceProfilesForExperience } from "@/lib/data/profiles";
 import { rehostImage } from "@/lib/storage";
 import { findKnownSubject } from "@/lib/known-subjects";
+import { logBuildMock } from "@/lib/data/build-mocks";
 import type { Narrator, ProfileInsert } from "@/types/database";
 
 type ExtractedMember = {
@@ -79,6 +80,7 @@ export async function POST(req: Request) {
   const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
   const html = await fetchHtml(url);
   if (!html) {
+    await logBuildMock("detect-team", "gravel", `${url} did not respond or blocked the request`);
     return NextResponse.json({ success: true, gravel: true, reason: "site did not respond or blocked the request" });
   }
 
@@ -99,8 +101,10 @@ export async function POST(req: Request) {
     members = result.members ?? [];
   } catch (err) {
     if (err instanceof AnthropicUnavailable) {
+      await logBuildMock("detect-team", "gravel", "ANTHROPIC_API_KEY not configured");
       return NextResponse.json({ success: true, gravel: true, reason: "ANTHROPIC_API_KEY not configured" });
     }
+    await logBuildMock("detect-team", "gravel", `team extraction failed: ${err instanceof Error ? err.message : "unknown error"}`);
     return NextResponse.json({ success: true, gravel: true, reason: "team extraction failed" });
   }
 

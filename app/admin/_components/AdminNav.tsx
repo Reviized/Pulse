@@ -31,6 +31,9 @@ export function AdminNav({ experiences }: { experiences: Experience[] }) {
         <Link href="/admin/build-status" className={`pa-tab ${pathname === "/admin/build-status" ? "active" : ""}`}>
           Build Status
         </Link>
+        <Link href="/admin/blueprint" className={`pa-tab ${pathname === "/admin/blueprint" ? "active" : ""}`}>
+          Blueprint
+        </Link>
         {SCOPED_TABS.map((tab) => (
           <Link
             key={tab.href}

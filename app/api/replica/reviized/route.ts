@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createJob, renderJob, ReviizedUnavailable, ReviizedApiError } from "@/lib/reviized";
+import { logBuildMock } from "@/lib/data/build-mocks";
 
 /**
  * Section 7's real contract: POST /v1/jobs/create/ -> PATCH
@@ -38,15 +39,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, gravel: false, reviizedJobId: job.id, status: job.status ?? "REQUESTED" });
   } catch (err) {
     if (err instanceof ReviizedUnavailable) {
+      await logBuildMock("replica/reviized", "gravel", err.message);
       return NextResponse.json({ success: true, gravel: true, reason: err.message });
     }
     if (err instanceof ReviizedApiError) {
+      await logBuildMock("replica/reviized", "gravel", `REViiZED API ${err.status}: ${err.message}`);
       return NextResponse.json({ success: true, gravel: true, reason: err.message, status: err.status });
     }
-    return NextResponse.json({
-      success: true,
-      gravel: true,
-      reason: err instanceof Error ? err.message : "REViiZED job creation failed",
-    });
+    const reason = err instanceof Error ? err.message : "REViiZED job creation failed";
+    await logBuildMock("replica/reviized", "gravel", reason);
+    return NextResponse.json({ success: true, gravel: true, reason });
   }
 }

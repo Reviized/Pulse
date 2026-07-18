@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { forcedToolCall, AnthropicUnavailable, enforceCopyRules } from "@/lib/anthropic";
+import { logBuildMock } from "@/lib/data/build-mocks";
 import type { SlideInsert, SlideLayout, SlideSpecial, SlideTextPos } from "@/types/database";
 
 const GENERATE_SLIDE_TOOL = {
@@ -120,6 +121,7 @@ export async function POST(req: Request) {
     } catch (err) {
       gravel = true;
       const reason = err instanceof AnthropicUnavailable ? "ANTHROPIC_API_KEY not configured" : "generation failed";
+      await logBuildMock("generate-slide", "gravel", `position ${position} (${layout}): ${reason}`);
       content = {
         eyebrow: label,
         headline: `${label ?? "Slide"}, gravel road`,

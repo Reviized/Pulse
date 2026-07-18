@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logBuildMock } from "@/lib/data/build-mocks";
 import type { DesignSpec } from "@/types/database";
 
 /**
@@ -155,6 +156,7 @@ export async function POST(req: Request) {
   const result = await extractRealSignals(url.toString());
 
   if (!result.ok) {
+    await logBuildMock("design-dna", "gravel", result.reason ?? "no signal found");
     return NextResponse.json({ success: true, gravel: true, reason: result.reason, companyName: result.companyName });
   }
 

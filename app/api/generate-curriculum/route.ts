@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { forcedToolCall, AnthropicUnavailable, enforceCopyRules } from "@/lib/anthropic";
+import { logBuildMock } from "@/lib/data/build-mocks";
 import type { TrainingModuleCheckpoint, TrainingModuleInsert } from "@/types/database";
 
 const OUTLINE_TOOL = {
@@ -85,6 +86,7 @@ export async function POST(req: Request) {
     outline = result.modules ?? [];
   } catch (err) {
     const reason = err instanceof AnthropicUnavailable ? "ANTHROPIC_API_KEY not configured" : "outline generation failed";
+    await logBuildMock("generate-curriculum", "gravel", reason);
     return NextResponse.json({ success: true, gravel: true, reason });
   }
 
@@ -137,6 +139,11 @@ export async function POST(req: Request) {
   }
 
   if (survivors.length < 3) {
+    await logBuildMock(
+      "generate-curriculum",
+      "gravel",
+      `only ${survivors.length} of ${outline.length} modules survived, need at least 3`
+    );
     return NextResponse.json({
       success: true,
       gravel: true,
