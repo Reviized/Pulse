@@ -224,7 +224,16 @@
   text-transform: uppercase;
   color: var(--dim);
 }
-.pd-media-poster { gap: 14px; }
+/* Anchored near the top rather than dead-center: the opening video slide's
+   text block is usually text_pos="lower" (Section 9's slide plan), so a
+   vertically-centered placeholder would collide with the headline sitting
+   in the bottom third of the same full-bleed slide. */
+.pd-media-poster {
+  align-content: start;
+  justify-items: center;
+  padding-top: 12vh;
+  gap: 14px;
+}
 
 /* ═══ LAYOUT · stats ═══ */
 .pd-slide[data-layout="stats"] .pd-textblock { align-items: flex-start; text-align: left; }
