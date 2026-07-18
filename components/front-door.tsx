@@ -1,11 +1,42 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import "@/app/styles/front-door.css";
 import type { Experience, ExperienceMode } from "@/types/database";
 
 type Stage = "intro" | "mode" | "url" | "gate";
+
+function ModeIcon({ mode }: { mode: ExperienceMode }) {
+  const paths: Record<ExperienceMode, JSX.Element> = {
+    inform: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <line x1="12" y1="11" x2="12" y2="16.2" />
+        <circle cx="12" cy="7.9" r="0.9" fill="currentColor" stroke="none" />
+      </>
+    ),
+    train: (
+      <>
+        <path d="M2.5 9L12 4.3 21.5 9 12 13.7 2.5 9z" />
+        <path d="M6.3 11v4.3c0 1.3 2.5 2.4 5.7 2.4s5.7-1.1 5.7-2.4V11" />
+        <path d="M20 9.6v5.1" />
+      </>
+    ),
+    sell: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="5.2" />
+        <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      </>
+    ),
+  };
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      {paths[mode]}
+    </svg>
+  );
+}
 
 const MODE_COPY: Record<
   ExperienceMode,
@@ -27,6 +58,17 @@ const MODE_COPY: Record<
     s: "Drop in the company's website. Pulse scrapes it live and builds the pitch in their brand and tone, grounded in what the site actually says.",
   },
 };
+
+const loadedGoogleFonts = new Set<string>();
+function loadGoogleFont(family: string) {
+  if (typeof document === "undefined") return;
+  if (loadedGoogleFonts.has(family)) return;
+  loadedGoogleFonts.add(family);
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@400;500;600;700&display=swap`;
+  document.head.appendChild(link);
+}
 
 type PipelineStepState = "pending" | "live" | "done";
 type PipelineStep = { id: string; label: string; state: PipelineStepState };
@@ -57,6 +99,9 @@ export function FrontDoor() {
   const [steps, setSteps] = useState<PipelineStep[]>([]);
   const [experience, setExperience] = useState<Experience | null>(null);
   const [gravel, setGravel] = useState(false);
+  const [brandAccent, setBrandAccent] = useState<string | null>(null);
+  const [brandFont, setBrandFont] = useState<string | null>(null);
+  const [brandMatched, setBrandMatched] = useState<boolean | null>(null); // null = not checked yet
   const [gateName, setGateName] = useState("");
   const [gateEmail, setGateEmail] = useState("");
   const [gateCode, setGateCode] = useState("");
@@ -89,16 +134,26 @@ export function FrontDoor() {
     const pipelineSteps = stepsForMode(mode, raw);
     setSteps(pipelineSteps);
 
-    // Real call: create the experience row (or a labeled gravel fallback — see
-    // app/api/experiences/route.ts). Runs alongside the step animation below
-    // rather than gating it, since design-dna/detect-team/generate-slide
-    // aren't wired yet (Phase 5) — the checklist times out honestly as a
-    // simulated pipeline in the meantime, matching Section 4's gravel-road
-    // philosophy rather than pretending those calls are real today.
+    // Real call #1: create the experience row (or a labeled gravel fallback —
+    // see app/api/experiences/route.ts).
     const createPromise = fetch("/api/experiences", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: fullUrl, mode }),
+    })
+      .then((r) => r.json())
+      .catch(() => ({ success: false }));
+
+    // Real call #2: extract actual signal from the target site's HTML — real
+    // theme-color/Google Font/declared font-family, no API key needed (see
+    // app/api/design-dna/route.ts). detect-team and generate-slide aren't
+    // wired yet (Phase 5) — the rest of the checklist times out honestly as a
+    // simulated pipeline in the meantime, matching Section 4's gravel-road
+    // philosophy rather than pretending those specific calls are real today.
+    const designPromise = fetch("/api/design-dna", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: fullUrl }),
     })
       .then((r) => r.json())
       .catch(() => ({ success: false }));
@@ -113,10 +168,22 @@ export function FrontDoor() {
       );
     }
 
-    const result = await createPromise;
+    const [result, design] = await Promise.all([createPromise, designPromise]);
     if (result?.success) {
       setExperience(result.experience);
       setGravel(Boolean(result.gravel));
+    }
+    if (design?.success && !design.gravel) {
+      const accent = design.designSpec?.palette?.accent as string | undefined;
+      const font = design.designSpec?.type?.font_family as string | undefined;
+      if (accent) setBrandAccent(accent);
+      if (font) {
+        setBrandFont(font);
+        if (design.googleFont) loadGoogleFont(font);
+      }
+      setBrandMatched(true);
+    } else {
+      setBrandMatched(false);
     }
 
     setRunning(false);
@@ -182,9 +249,9 @@ export function FrontDoor() {
             <div className="mode-cards">
               {(["inform", "train", "sell"] as ExperienceMode[]).map((m) => (
                 <button key={m} className="mcard" data-m={m} onClick={() => chooseMode(m)}>
-                  <span
-                    className={`orb ${m === "inform" ? "blue" : m === "train" ? "orange" : "green"}`}
-                  />
+                  <span className="micon">
+                    <ModeIcon mode={m} />
+                  </span>
                   <b>{m[0].toUpperCase() + m.slice(1)}</b>
                   <span className="mdesc">{MODE_COPY[m].d}</span>
                   <span className="menter">Enter →</span>
@@ -249,21 +316,38 @@ export function FrontDoor() {
 
       {/* ═══ GATE ═══ */}
       {stage === "gate" && (
-        <div className="gate-root show">
-          <div className="gate-card">
+        <div
+          className="gate-root show"
+          style={
+            brandAccent
+              ? ({ "--mode": brandAccent } as CSSProperties)
+              : undefined
+          }
+        >
+          <div
+            className="gate-card"
+            style={brandFont ? { fontFamily: `${brandFont}, var(--display)` } : undefined}
+          >
             <div className="gate-mark">
               {companyWords.map((w, i) => (
                 <span key={i}>
-                  {i === goldWordIdx ? <span style={{ color: "var(--gold)" }}>{w}</span> : w}
+                  {i === goldWordIdx ? (
+                    <span style={{ color: brandAccent ?? "var(--gold)" }}>{w}</span>
+                  ) : (
+                    w
+                  )}
                   {i < companyWords.length - 1 ? " " : ""}
                 </span>
               ))}
             </div>
             <div className="gate-sub">
-              A Pulse Experience{gravel ? " · gravel road (unsaved demo)" : ""}
+              A Pulse Experience
+              {gravel ? " · gravel road (unsaved demo)" : ""}
+              {brandMatched === true ? " · brand matched from live site" : ""}
+              {brandMatched === false ? " · default Pulse branding (no signal found)" : ""}
             </div>
-            <h1>
-              Before we begin, let&apos;s get <em>introduced.</em>
+            <h1 style={brandFont ? { fontFamily: `${brandFont}, var(--display)` } : undefined}>
+              Before we begin, let&apos;s get introduced.
             </h1>
             <p>Enter your email and access code to unlock this experience.</p>
             <input
@@ -291,7 +375,7 @@ export function FrontDoor() {
               value={gateCode}
               onChange={(e) => setGateCode(e.target.value)}
             />
-            <button className="cta" style={{ width: "100%", marginTop: 8 }} onClick={tryGate}>
+            <button className="fd-go fd-go-block" onClick={tryGate}>
               Unlock Experience
             </button>
             <div className="gate-error">{gateError}</div>
