@@ -95,6 +95,7 @@ export function FrontDoor() {
   const [mode, setMode] = useState<ExperienceMode | null>(null);
   const [urlValue, setUrlValue] = useState("");
   const [running, setRunning] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [steps, setSteps] = useState<PipelineStep[]>([]);
   const [experience, setExperience] = useState<Experience | null>(null);
   const [gravel, setGravel] = useState(false);
@@ -115,6 +116,20 @@ export function FrontDoor() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Real generation calls (curriculum especially, several sequential Claude
+  // calls) can run 30s+. A step that just sits there with no motion reads as
+  // frozen, so tick a live "how long has this been running" counter next to
+  // whichever step is current, on top of the CSS pulse on its icon.
+  useEffect(() => {
+    if (!running) {
+      setElapsedSec(0);
+      return;
+    }
+    setElapsedSec(0);
+    const interval = setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [running]);
 
   function endIntro() {
     if (introDone.current) return;
@@ -394,8 +409,11 @@ export function FrontDoor() {
               <div className="fd-prog">
                 {steps.map((s) => (
                   <div key={s.id} className={`fd-prog-item ${s.state}`}>
-                    <span className="ic">{s.state === "done" ? "✓" : s.state === "live" ? "◉" : "○"}</span>
+                    <span className="ic">
+                      {s.state === "done" ? "✓" : s.state === "live" ? <span className="fd-pulse-dot" /> : "○"}
+                    </span>
                     {s.label}
+                    {s.state === "live" && <span className="fd-elapsed">{elapsedSec}s</span>}
                   </div>
                 ))}
               </div>
