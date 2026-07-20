@@ -22,12 +22,20 @@ export function AdminNav({ experiences }: { experiences: Experience[] }) {
 
   return (
     <div className="pa-topbar">
-      <div className="pa-mark">
+      {/* Plain <a>, not next/link's Link: leaving /admin entirely (a
+          different route tree, not a same-layout tab switch) proved to
+          silently no-op as a client-side transition in this environment —
+          same class of bug already found and fixed in front-door.tsx's
+          Gate unlock. A real anchor guarantees the browser actually moves. */}
+      <a href="/" className="pa-mark" title="Back to the Front Door">
         <b>PULSE</b> ADMIN
         <span className="pa-pulse-point">REViiZED &amp; Pulse team only</span>
-      </div>
+      </a>
 
       <div className="pa-tabs">
+        <a href="/" className="pa-tab pa-tab-exit">
+          ← Front Door
+        </a>
         <Link href="/admin/build-status" className={`pa-tab ${pathname === "/admin/build-status" ? "active" : ""}`}>
           Build Status
         </Link>

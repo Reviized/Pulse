@@ -60,6 +60,8 @@
 }
 .pa-tab:hover { color: var(--cream); border-color: var(--border-hi); }
 .pa-tab.active { color: var(--bg); background: var(--gold); border-color: var(--gold); }
+.pa-tab-exit { color: var(--tan); border-color: var(--border); margin-right: 6px; }
+.pa-tab-exit:hover { color: var(--gold); }
 .pa-exp-picker {
   display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--dim);
 }
