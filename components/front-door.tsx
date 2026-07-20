@@ -368,9 +368,11 @@ export function FrontDoor() {
                 </button>
               ))}
             </div>
-            <button className="fd-admin-pill" disabled title="Admin panel — later phase">
+            {/* Admin has landed (app/admin/**) — this used to be a disabled
+                gravel-road placeholder ("later phase"); now a real link. */}
+            <a className="fd-admin-pill" href="/admin">
               ⚙ Admin · team only
-            </button>
+            </a>
           </div>
         </div>
       )}
@@ -504,6 +506,9 @@ export function FrontDoor() {
             <button className="fd-skip" style={{ marginTop: 18 }} onClick={() => setStage("mode")}>
               ← Back to the front door
             </button>
+            <a className="fd-admin-pill" href="/admin" style={{ marginTop: 14 }}>
+              ⚙ Admin · team only
+            </a>
           </div>
         </div>
       )}

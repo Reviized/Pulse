@@ -15,6 +15,7 @@ export default async function TrainPage({ params }: { params: { id: string } }) 
     <TrainFlow
       experienceId={experience.id}
       companyName={experience.company_name ?? "This Company"}
+      accessCode={experience.access_code}
       narrator={experience.narrator}
       modules={modules}
     />

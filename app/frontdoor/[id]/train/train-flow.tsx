@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import "@/app/styles/train.css";
+// .pd-dock and .pd-gate-overlay (the presenter navigation dock and its Gate
+// reentry card) live in deck.css, styled for components/slide-viewer.tsx.
+// Pulled in here too rather than duplicated, so both routes share one
+// source of truth for that nav chrome.
+import "@/app/styles/deck.css";
+import { PresenterDock } from "@/components/presenter-dock";
 import type { Narrator } from "@/types/database";
 import type { RatingModule, PlayerModule } from "./actions";
 import {
@@ -16,6 +22,7 @@ type Stage = "intro" | "self-ratings" | "insights" | "interview" | "inferring" |
 type TrainFlowProps = {
   experienceId: string;
   companyName: string;
+  accessCode: string;
   narrator: Narrator | null;
   modules: RatingModule[];
 };
@@ -49,8 +56,13 @@ function formatTimer(seconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export function TrainFlow({ experienceId, companyName, narrator, modules }: TrainFlowProps) {
+export function TrainFlow({ experienceId, companyName, accessCode, narrator, modules }: TrainFlowProps) {
   const [stage, setStage] = useState<Stage>("intro");
+  // Section 9's presenter dock: same "Gate reentry" pattern as
+  // slide-viewer.tsx's GateOverlay. Train mode has no in-page Gate stage to
+  // reopen (the Gate lives entirely in front-door.tsx, before this route
+  // ever mounts), so this renders the same self-contained presenter view.
+  const [gateOpen, setGateOpen] = useState(false);
   // Gravel-road default: the Gate → /frontdoor/[id]/train handoff (owned by
   // front-door.tsx, out of this build's scope) doesn't currently forward the
   // trainee's email or a session key into this route, so the Train flow
@@ -123,6 +135,14 @@ export function TrainFlow({ experienceId, companyName, narrator, modules }: Trai
     }
   }
   useEffect(() => () => teardownInterview(), []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && gateOpen) setGateOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [gateOpen]);
 
   async function startCamera() {
     try {
@@ -608,6 +628,46 @@ export function TrainFlow({ experienceId, companyName, narrator, modules }: Trai
             <p className="lede">Thanks for training with {companyName}. Your responses have been recorded.</p>
           </div>
         )}
+      </div>
+
+      <PresenterDock
+        onShowGate={() => setGateOpen(true)}
+        onJumpExperience={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      />
+      {gateOpen && (
+        <TrainGateOverlay companyName={companyName} accessCode={accessCode} onClose={() => setGateOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Train mode's version of slide-viewer.tsx's GateOverlay — same idea (a
+ * self-contained presenter view of the access screen a visitor saw, built
+ * from data already loaded server-side), reusing the .pd-gate-overlay /
+ * .pd-gate-card classes from deck.css so both flows look identical.
+ */
+function TrainGateOverlay({
+  companyName,
+  accessCode,
+  onClose,
+}: {
+  companyName: string;
+  accessCode: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="pd-gate-overlay" onClick={onClose}>
+      <div className="pd-gate-card" onClick={(e) => e.stopPropagation()}>
+        <div className="pd-gate-mark">{companyName}</div>
+        <div className="pd-gate-sub">The Gate, presenter view</div>
+        <h2>This is the screen visitors saw to unlock this experience</h2>
+        <p>
+          Email plus access code. The pilot access code for this experience is <code>{accessCode}</code>.
+        </p>
+        <button type="button" className="pd-gate-close" onClick={onClose}>
+          Back to the Experience
+        </button>
       </div>
     </div>
   );
