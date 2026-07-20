@@ -45,6 +45,13 @@ export function SlideViewer({
   const completeTrackedRef = useRef(false);
   const [ppOpen, setPpOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
+  // "Talk to {name}" on the Team slide (Section 8, item 4's known-subjects
+  // registry plus detect-team already put a real profile behind every
+  // headshot; this just lets a click route the Pulse Point at that specific
+  // person instead of always defaulting to the current slide's own speaker).
+  // Cleared on every slide change so leaving the Team slide always falls
+  // back to that slide's own assigned speaker.
+  const [ppOverride, setPpOverride] = useState<{ profileId: string; name: string } | null>(null);
 
   // Per-visit session key, kept in a ref (never persisted) so a full page
   // reload starts a fresh session, matching the pattern in app/api/gate.
@@ -130,10 +137,23 @@ export function SlideViewer({
     setPpOpen(next);
   }
 
+  function talkTo(profileId: string, name: string) {
+    setPpOverride({ profileId, name });
+    handlePpOpenChange(true);
+  }
+
+  // Leaving the Team slide (by scroll or dock jump) drops the override, so
+  // the Pulse Point reverts to speaking as whichever slide is now active.
+  useEffect(() => {
+    setPpOverride(null);
+  }, [activeIndex]);
+
   const activeSlide = slides[activeIndex];
   const speakerProfile = activeSlide?.speaker_profile_id
     ? profiles.find((p) => p.id === activeSlide.speaker_profile_id) ?? null
     : null;
+  const effectiveSpeakerId = ppOverride?.profileId ?? activeSlide?.speaker_profile_id ?? null;
+  const effectiveSpeakerName = ppOverride?.name ?? speakerProfile?.name ?? null;
 
   const rootStyle = {
     ...(accent ? { "--mode": accent } : {}),
@@ -155,7 +175,7 @@ export function SlideViewer({
             data-special={slide.special ?? undefined}
             data-textpos={slide.text_pos ?? "center"}
           >
-            <SlideBody slide={slide} profiles={profiles} onAskOpen={() => handlePpOpenChange(true)} />
+            <SlideBody slide={slide} profiles={profiles} onAskOpen={() => handlePpOpenChange(true)} onTalkTo={talkTo} />
           </div>
         ))}
       </div>
@@ -171,8 +191,8 @@ export function SlideViewer({
         onOpenChange={handlePpOpenChange}
         experienceId={experience.id}
         sessionKey={sessionKey}
-        speakerProfileId={activeSlide?.speaker_profile_id ?? null}
-        speakerName={speakerProfile?.name ?? null}
+        speakerProfileId={effectiveSpeakerId}
+        speakerName={effectiveSpeakerName}
         hideTrigger={activeSlide?.special === "ask"}
       />
     </div>
@@ -211,13 +231,15 @@ function SlideBody({
   slide,
   profiles,
   onAskOpen,
+  onTalkTo,
 }: {
   slide: Slide;
   profiles: Profile[];
   onAskOpen: () => void;
+  onTalkTo: (profileId: string, name: string) => void;
 }) {
   if (slide.special === "ask") return <AskSlideBody slide={slide} onAskOpen={onAskOpen} />;
-  if (slide.special === "team") return <TeamSlideBody slide={slide} />;
+  if (slide.special === "team") return <TeamSlideBody slide={slide} profiles={profiles} onTalkTo={onTalkTo} />;
   if (slide.special === "spotlight") return <SpotlightSlideBody slide={slide} profiles={profiles} />;
 
   switch (slide.layout) {
@@ -389,28 +411,76 @@ function initials(name?: string | null): string {
     .join("");
 }
 
-function TeamSlideBody({ slide }: { slide: Slide }) {
+// items is a denormalized snapshot (name/title/headshot_url) written at
+// generate-slide time, not a foreign key — match back to the live profiles
+// table by name so a click can target a real profile id, same token-match
+// approach detect-team already uses to reanchor the narrator.
+function matchProfileByName(name: string | undefined, profiles: Profile[]): Profile | null {
+  if (!name) return null;
+  const norm = name.trim().toLowerCase();
+  const exact = profiles.find((p) => p.name.trim().toLowerCase() === norm);
+  if (exact) return exact;
+  const tokens = norm.split(/\s+/);
+  return (
+    profiles.find((p) => {
+      const pTokens = p.name.trim().toLowerCase().split(/\s+/);
+      return pTokens[0] === tokens[0] || pTokens[pTokens.length - 1] === tokens[tokens.length - 1];
+    }) ?? null
+  );
+}
+
+function TeamSlideBody({
+  slide,
+  profiles,
+  onTalkTo,
+}: {
+  slide: Slide;
+  profiles: Profile[];
+  onTalkTo: (profileId: string, name: string) => void;
+}) {
   const items = (Array.isArray(slide.items) ? slide.items : []) as TeamItem[];
   return (
     <div className="pd-textblock">
       {slide.eyebrow && <p className="pd-eyebrow">{slide.eyebrow}</p>}
       {slide.headline && <h2 className="pd-headline">{slide.headline}</h2>}
       <div className="pd-team-grid">
-        {items.map((m, i) => (
-          <div key={i} className="pd-team-card">
-            {m.headshot_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={m.headshot_url} alt={m.name ?? ""} className="pd-team-photo" />
-            ) : (
-              <div className="pd-team-monogram">{initials(m.name)}</div>
-            )}
-            <div className="pd-team-name">{m.name}</div>
-            {m.title && <div className="pd-team-title">{m.title}</div>}
-          </div>
-        ))}
+        {items.map((m, i) => {
+          const profile = matchProfileByName(m.name, profiles);
+          const card = (
+            <>
+              {m.headshot_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={m.headshot_url} alt={m.name ?? ""} className="pd-team-photo" />
+              ) : (
+                <div className="pd-team-monogram">{initials(m.name)}</div>
+              )}
+              <div className="pd-team-name">{m.name}</div>
+              {m.title && <div className="pd-team-title">{m.title}</div>}
+              {profile && <span className="pd-team-talk">Talk to {firstName(m.name)}</span>}
+            </>
+          );
+          return profile ? (
+            <button
+              key={i}
+              type="button"
+              className="pd-team-card pd-team-card-live"
+              onClick={() => onTalkTo(profile.id, profile.name)}
+            >
+              {card}
+            </button>
+          ) : (
+            <div key={i} className="pd-team-card">
+              {card}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function firstName(name?: string | null): string {
+  return name?.trim().split(/\s+/)[0] ?? "them";
 }
 
 function SpotlightSlideBody({ slide, profiles }: { slide: Slide; profiles: Profile[] }) {

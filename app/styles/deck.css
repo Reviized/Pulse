@@ -318,6 +318,16 @@
   color: var(--gold-hi);
 }
 .pd-team-name { font-size: 14.5px; font-weight: 600; color: var(--cream); }
+.pd-team-card-live {
+  background: none; border: none; cursor: pointer; font: inherit; padding: 10px; border-radius: 12px;
+  transition: background .2s;
+}
+.pd-team-card-live:hover, .pd-team-card-live:focus-visible { background: rgba(240,237,230,.05); }
+.pd-team-talk {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--gold);
+  opacity: 0; transition: opacity .2s; margin-top: 2px;
+}
+.pd-team-card-live:hover .pd-team-talk, .pd-team-card-live:focus-visible .pd-team-talk { opacity: 1; }
 .pd-team-title { font-size: 11.5px; color: var(--dim); }
 
 /* ═══ SPECIAL · ask ═══ */
